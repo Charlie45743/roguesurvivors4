@@ -1,4 +1,4 @@
-// Cinderwake server: serves the game and relays co-op rooms over WebSocket (no dependencies).
+// Rogue Survivors 3 server: serves the game and relays co-op rooms over WebSocket (no dependencies).
 // Local:  node serve.js [port]  ->  http://localhost:8765
 // Hosted: set PORT (Render, Fly.io and Railway do this for you) and run `node serve.js`.
 const http = require('http'), fs = require('fs'), path = require('path'), crypto = require('crypto');
@@ -102,4 +102,4 @@ server.on('upgrade', (req, socket) => {
   };
 });
 
-server.listen(port, '0.0.0.0', () => console.log(`Cinderwake running at http://localhost:${port}`));
+server.listen(port, '0.0.0.0', () => console.log(`Rogue Survivors 3 running at http://localhost:${port}`));

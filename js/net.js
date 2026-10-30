@@ -15,7 +15,7 @@ HUD_STATES.add('wait');
 /* ---------- Lobby ---------- */
 function openLobby() {
   setState('lobby');
-  lobbyStatus(location.protocol === 'file:' ? 'Co-op needs the game server. Run it with node serve.js and open the address it prints.' : 'Create a room and share its code, or join a friend\'s room.');
+  lobbyStatus('Create a room and share its code, or join a friend\'s room.');
   renderLobbyChars();
 }
 function lobbyStatus(t) { $('lobbyStatus').textContent = t; }
@@ -33,9 +33,68 @@ function renderLobbyChars() {
   $('roomInfo').textContent = Net.peer ? `Partner joined as ${CHARS.find(c => c.id === Net.peerChar)?.name || '...'}` : Net.code ? 'Waiting for your partner...' : '';
   $('btnStartCoop').classList.toggle('hidden', !(Net.role === 'host' && Net.peer));
 }
+/* Transport. By default co-op is peer to peer (WebRTC via PeerJS), so it works from static hosting such as GitHub Pages
+   with no game server. The room code is the host's peer id. To use the serve.js relay instead, set COOP_SERVER to its
+   address (e.g. 'wss://your-app.onrender.com/ws') or open the page with ?server=wss://host/ws. */
+const COOP_SERVER = '';
+const PEER_PREFIX = 'rogue-survivors-3-';
+const coopUrl = () => new URLSearchParams(location.search).get('server') || COOP_SERVER;
+
+/* A WebSocket look-alike speaking the same protocol as serve.js (create / join / relay), carried over a PeerJS data connection */
+function peerSocket() {
+  const ws = {
+    readyState: 0, onopen: null, onerror: null, onclose: null, onmessage: null, peer: null, conn: null, timer: 0,
+    emit(m) { if (ws.onmessage) ws.onmessage({ data: JSON.stringify(m) }); },
+    fail(msg) { ws.emit({ t: 'error', msg }); ws.close(); },
+    reset() { clearTimeout(ws.timer); if (ws.peer) { ws.peer.destroy(); ws.peer = null; } ws.conn = null; },
+    send(str) {
+      const m = JSON.parse(str);
+      if (m.t === 'create') ws.host(0);
+      else if (m.t === 'join') ws.join(String(m.code).toUpperCase());
+      else if (ws.conn && ws.conn.open) ws.conn.send(str);
+    },
+    host(tries) {
+      ws.reset();
+      const code = Array.from({ length: 4 }, () => 'ABCDEFGHJKLMNPQRSTUVWXYZ'[Math.random() * 24 | 0]).join('');
+      const peer = ws.peer = new Peer(PEER_PREFIX + code);
+      peer.on('open', () => ws.emit({ t: 'created', code }));
+      peer.on('error', e => { if (e.type === 'unavailable-id' && tries < 6) ws.host(tries + 1); else ws.fail('Could not set up the room (' + e.type + ').'); });
+      peer.on('connection', conn => {
+        if (ws.conn) { conn.on('open', () => { conn.send(JSON.stringify({ t: 'error', msg: 'That room is already full.' })); setTimeout(() => conn.close(), 300); }); return; }
+        ws.conn = conn;
+        conn.on('open', () => ws.emit({ t: 'peer' }));
+        conn.on('data', d => ws.onmessage({ data: d }));
+        conn.on('close', () => { if (ws.conn === conn) { ws.conn = null; ws.emit({ t: 'left' }); } });
+      });
+    },
+    join(code) {
+      ws.reset();
+      const peer = ws.peer = new Peer();
+      peer.on('error', e => ws.fail(e.type === 'peer-unavailable' ? 'No room with that code.' : 'Could not connect (' + e.type + ').'));
+      peer.on('open', () => {
+        const conn = ws.conn = peer.connect(PEER_PREFIX + code, { reliable: true });
+        ws.timer = setTimeout(() => { if (!conn.open) ws.fail('Could not reach the host. A strict network or firewall may be blocking peer to peer.'); }, 15000);
+        conn.on('open', () => { clearTimeout(ws.timer); ws.emit({ t: 'joined', code }); });
+        conn.on('data', d => ws.onmessage({ data: d }));
+        conn.on('close', () => { ws.emit({ t: 'left' }); ws.close(); });
+      });
+    },
+    close() {
+      if (ws.readyState === 3) return;
+      ws.readyState = 3;
+      ws.reset();
+      if (ws.onclose) ws.onclose();
+    },
+  };
+  setTimeout(() => { ws.readyState = 1; if (ws.onopen) ws.onopen(); }, 0);
+  return ws;
+}
 function connect(then) {
   if (Net.ws && Net.ws.readyState <= 1) { then(); return; }
-  const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
+  const url = coopUrl();
+  if (!url && typeof Peer === 'undefined') { lobbyStatus('Could not load the peer to peer library. Check your connection and reload.'); return; }
+  lobbyStatus(url ? 'Connecting to the co-op server (a sleeping free host can take up to a minute)...' : 'Connecting...');
+  const ws = url ? new WebSocket(url) : peerSocket();
   Net.ws = ws;
   ws.onopen = then;
   ws.onerror = () => lobbyStatus('Could not reach the co-op server.');
@@ -48,10 +107,10 @@ function connect(then) {
   ws.onmessage = ev => onNet(JSON.parse(ev.data));
 }
 $('btnCoop').onclick = () => { Snd.play('select'); openLobby(); };
-$('btnCreate').onclick = () => { if (location.protocol === 'file:') return; Snd.play('select'); connect(() => Net.ws.send(JSON.stringify({ t: 'create' }))); };
+$('btnCreate').onclick = () => { Snd.play('select'); connect(() => Net.ws.send(JSON.stringify({ t: 'create' }))); };
 $('btnJoin').onclick = () => {
   const code = $('roomCode').value.trim().toUpperCase();
-  if (code.length !== 4 || location.protocol === 'file:') { lobbyStatus('Enter the 4-letter room code.'); return; }
+  if (code.length !== 4) { lobbyStatus('Enter the 4-letter room code.'); return; }
   Snd.play('select');
   connect(() => Net.ws.send(JSON.stringify({ t: 'join', code })));
 };

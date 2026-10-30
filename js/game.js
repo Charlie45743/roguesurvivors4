@@ -1,5 +1,5 @@
 'use strict';
-/* CINDERWAKE: simulation, rendering and UI */
+/* ROGUE SURVIVORS 3: simulation, rendering and UI */
 
 const $ = id => document.getElementById(id);
 const cv = $('game'), ctx = cv.getContext('2d');
