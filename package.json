@@ -1,0 +1,12 @@
+{
+  "name": "cinderwake",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Pixel-art survivor roguelite with story mode and online co-op",
+  "scripts": {
+    "start": "node serve.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

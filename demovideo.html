@@ -1,0 +1,362 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cinderwake Demo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=Pixelify+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --void: #0b0a12; --panel: #15131f; --panel2: #1c1a2b; --line: #36304f; --line2: #5e557f;
+  --ink: #f2eee6; --dim: #a59cc4; --ember: #e8742c; --gold: #ffd35a; --red: #d8354a; --blood: #7a1a2a; --cyan: #8ff0ff;
+  --head: 'Silkscreen', 'Courier New', monospace;
+  --body: 'Pixelify Sans', 'Courier New', monospace;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: #000; color: var(--ink); font-family: var(--body); overflow: hidden; }
+button { font: inherit; color: inherit; }
+
+#stage { position: absolute; inset: 0 0 64px 0; display: flex; align-items: center; justify-content: center; }
+#frame { position: relative; width: min(100%, calc((100vh - 64px) * 16 / 9)); aspect-ratio: 16 / 9; background: var(--void); overflow: hidden; }
+#frame iframe { position: absolute; top: 0; height: 100%; border: 0; display: block; background: var(--void); }
+#gameA { left: 0; width: 100%; }
+#frame #gameB { left: 50%; width: 50%; display: none; }
+#frame.split #gameA { width: 50%; }
+#frame.split #gameB { display: block; }
+#frame.split::after { content: ''; position: absolute; top: 0; bottom: 0; left: calc(50% - 2px); width: 4px; background: var(--void); z-index: 3; }
+.who { position: absolute; bottom: 12px; z-index: 4; font-family: var(--head); font-size: 13px; letter-spacing: 2px; padding: 5px 10px;
+  background: rgba(11,10,18,.8); border: 2px solid var(--line2); display: none; }
+#frame.split .who { display: block; }
+#whoA { right: calc(50% + 12px); color: var(--gold); } #whoB { right: 12px; color: var(--cyan); }
+#shield { position: absolute; inset: 0; z-index: 2; } /* keeps clicks out of the game so focus never pauses it */
+
+#fade { position: absolute; inset: 0; background: #000; z-index: 6; opacity: 1; transition: opacity .45s; pointer-events: none; }
+#fade.clear { opacity: 0; }
+
+
+/* Captions */
+#cap { position: absolute; left: 0; right: 0; bottom: 15%; z-index: 5; display: flex; flex-direction: column; align-items: center;
+  gap: 8px; padding: 0 24px; text-align: center; pointer-events: none; }
+#cap.top { bottom: auto; top: 12%; }
+#cap .h { font-family: var(--head); font-weight: 700; font-size: clamp(18px, 3.2vw, 40px); line-height: 1.1; letter-spacing: 1px;
+  color: var(--ink); text-shadow: 0 3px 0 var(--blood), 0 6px 0 var(--void), 0 0 24px rgba(0,0,0,.9); }
+#cap .s { font-size: clamp(14px, 1.7vw, 21px); color: var(--ink); background: rgba(11,10,18,.78); padding: 5px 12px;
+  border-left: 3px solid var(--ember); }
+#cap .h, #cap .s { animation: capIn .5s cubic-bezier(.2,.8,.2,1) both; }
+#cap .s { animation-delay: .15s; }
+#cap.out .h, #cap.out .s { animation: capOut .35s forwards; }
+@keyframes capIn { from { opacity: 0; transform: translateY(14px); } }
+@keyframes capOut { to { opacity: 0; transform: translateY(-8px); } }
+
+/* Full-screen title moments (intro / outro) */
+#title { position: absolute; inset: 0; z-index: 5; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+  background: radial-gradient(ellipse at center, rgba(11,10,18,.5), rgba(11,10,18,.94)); opacity: 0; transition: opacity .6s; pointer-events: none; padding: 0 24px; text-align: center; }
+#title.on { opacity: 1; }
+#title .big { font-family: var(--head); font-weight: 700; font-size: clamp(40px, 9vw, 112px); line-height: .95; color: var(--gold); letter-spacing: 4px;
+  text-shadow: 0 5px 0 var(--ember), 0 10px 0 var(--red), 0 15px 0 var(--blood), 0 20px 0 var(--void); }
+#title .line { font-size: clamp(16px, 2.2vw, 24px); color: var(--dim); margin-top: 18px; }
+#title .kick { font-family: var(--head); font-size: clamp(12px, 1.3vw, 15px); letter-spacing: 6px; color: var(--ember); text-transform: uppercase; }
+
+/* Start screen */
+#start { position: fixed; inset: 0; z-index: 20; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 26px;
+  background: radial-gradient(ellipse at center, #1c1a2b, #000 75%); padding: 0 16px; text-align: center; }
+#start h1 { margin: 0; font-family: var(--head); font-weight: 700; font-size: clamp(44px, 10vw, 120px); line-height: .95; color: var(--gold); letter-spacing: 4px;
+  text-shadow: 0 5px 0 var(--ember), 0 10px 0 var(--red), 0 15px 0 var(--blood), 0 20px 0 #000; }
+#start p { margin: 0; color: var(--dim); font-size: clamp(16px, 2vw, 21px); max-width: 560px; }
+.btn { font-family: var(--head); font-size: 22px; letter-spacing: 1px; background: var(--ember); color: var(--void); border: 0; padding: 14px 40px; cursor: pointer;
+  box-shadow: inset -4px -4px 0 #9b3b16, inset 4px 4px 0 #ffb070, 0 0 0 3px #000, 0 6px 0 3px #000; transition: transform .08s; }
+.btn:hover, .btn:focus-visible { transform: translateY(-2px); outline: none; filter: brightness(1.1); }
+.btn:active { transform: translateY(2px); }
+
+/* Player bar */
+#bar { position: fixed; left: 0; right: 0; bottom: 0; height: 64px; background: var(--panel); border-top: 2px solid var(--line);
+  display: flex; align-items: center; gap: 14px; padding: 0 16px; }
+.ctl { font-family: var(--head); font-size: 13px; background: var(--panel2); border: 2px solid var(--line2); padding: 7px 11px; cursor: pointer; white-space: nowrap; }
+.ctl:hover, .ctl:focus-visible { border-color: var(--gold); outline: none; }
+#track { flex: 1; display: flex; gap: 3px; height: 30px; align-items: stretch; min-width: 0; }
+.seg { position: relative; flex: 1; background: var(--panel2); cursor: pointer; overflow: hidden; border: 0; padding: 0; }
+.seg i { position: absolute; inset: 0; width: 0; background: var(--ember); }
+.seg span { position: absolute; left: 6px; top: 50%; transform: translateY(-50%); font-family: var(--head); font-size: 11px; letter-spacing: 1px;
+  color: var(--ink); white-space: nowrap; pointer-events: none; mix-blend-mode: difference; }
+.seg:hover { filter: brightness(1.4); }
+#clock { font-family: var(--head); font-size: 13px; color: var(--dim); min-width: 92px; text-align: right; }
+@media (max-width: 760px) { .seg span { display: none; } #clock { display: none; } }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="frame">
+    <iframe id="gameA" title="Cinderwake gameplay" allow="autoplay"></iframe>
+    <iframe id="gameB" title="Cinderwake co-op partner" allow="autoplay"></iframe>
+    <div class="who" id="whoA">Player 1 · Host</div>
+    <div class="who" id="whoB">Player 2 · Joined by code</div>
+    <div id="shield"></div>
+    <div id="cap"></div>
+    <div id="title"></div>
+    <div id="fade"></div>
+  </div>
+</div>
+<div id="bar">
+  <button class="ctl" id="play">Pause</button>
+  <button class="ctl" id="mute">Sound on</button>
+  <div id="track"></div>
+  <div id="clock">0:00 / 0:00</div>
+</div>
+<div id="start">
+  <h1>CINDERWAKE</h1>
+  <p>A live demo. Every shot is the real game running right now, played by an autopilot.</p>
+  <button class="btn" id="go">Play demo</button>
+</div>
+
+<script>
+'use strict';
+/* Each scene loads the game with a test hook and runs captions on a timeline.
+   caps: [seconds, headline, subline]; title: full-screen card instead of a caption. */
+const roomCode = () => Array.from({ length: 4 }, () => 'ABCDEFGHJKLMNPQRSTUVWXYZ'[Math.floor(Math.random() * 24)]).join('');
+const SCENES = [
+  { group: 'Intro', url: 'auto=vesper&t=420&lv=18&evo=1&god=1', dur: 7, title: ['', 'CINDERWAKE', 'The sun went out a hundred years ago. Hold the line until it rises.'] },
+
+  { group: 'Gameplay', url: 'auto=wren&god=1&lv=4', dur: 16, caps: [
+    [0.6, 'Survive the Long Night', 'Fifteen minutes. Endless dead. One ember.'],
+    [6, 'Just move. Your weapons fire on their own.', 'Kite the horde, weave through gaps, never stop walking'],
+    [11, 'Gems become levels. Levels become power.', 'Every level-up offers three weapons or passives to choose from'] ] },
+  { group: 'Gameplay', url: 'auto=isolde&t=720&lv=30&evo=1&god=1', dur: 12, caps: [
+    [0.6, 'Evolve weapons into storms', 'Max a weapon with its partner passive, then crack open a chest'],
+    [6.5, 'Late game gets loud', 'Minute twelve: thousands of enemies, screen-wide attacks'] ] },
+  { group: 'Gameplay', url: 'screen=chars', dur: 7, caps: [
+    [0.6, 'Eight heroes', 'Each with a signature weapon and a different way to play'] ] },
+  { group: 'Gameplay', url: 'auto=pell&shrine=600&open=1&god=1&calm=1', dur: 10, caps: [
+    [0.6, 'Gamble at hidden shrines', 'Spend your gold for a relic... or for absolutely nothing'] ] },
+
+  { group: 'World', url: 'auto=wren&god=1&calm=1&goto=village', dur: 8, home: true, caps: [
+    [0.6, 'A world worth exploring', 'Villages with a witch, blacksmith, alchemist, merchant and more'] ] },
+  { group: 'World', url: 'auto=nyx&god=1&calm=1&goto=tower', dur: 6, home: true, caps: [
+    [0.5, 'Ancient towers', 'Every structure has a name, an arrival, and its own atmosphere'] ] },
+  { group: 'World', url: 'auto=morrow&god=1&calm=1&goto=graveyard', dur: 6, home: true, caps: [
+    [0.5, 'Cursed graveyards', 'Cleanse them, or wake what sleeps there'] ] },
+  { group: 'World', url: 'auto=sable&god=1&calm=1&goto=mansion', dur: 6, home: true, caps: [
+    [0.5, 'The locked mansion', 'Somewhere nearby there is a key'] ] },
+  { group: 'World', url: 'auto=brask&god=1&lv=6&ev=meteor', dur: 9, caps: [
+    [0.6, 'World events strike mid-run', 'Meteor showers, blood moons, sieges, caravans and the Hunt'] ] },
+
+  { group: 'Dungeons', url: 'auto=wren&god=1&theme=crypt', dur: 11, dungeon: true, caps: [
+    [0.6, 'Dive into crypts', 'Short side-scrolling raids: jump, roll, slash, grab the loot'] ] },
+  { group: 'Dungeons', url: 'auto=sable&god=1&theme=mansion', dur: 8, dungeon: true, caps: [
+    [0.5, 'Inside the mansion', 'New enemies and a chest in every room'] ] },
+
+  { group: 'Dimensions', url: 'auto=nyx&god=1&lv=8&dim=frozen', dur: 7, caps: [
+    [0.8, 'Step through portals', 'The Frozen Expanse · danger x1.6'] ] },
+  { group: 'Dimensions', url: 'auto=pell&god=1&lv=10&dim=rift', dur: 7, caps: [
+    [0.8, 'Each world is harder than the last', 'The Infernal Rift · danger x2.3'] ] },
+  { group: 'Dimensions', url: 'auto=vesper&god=1&lv=12&dim=void', dur: 7, caps: [
+    [0.8, 'The Void Garden', 'Something there has been watching'] ] },
+
+  { group: 'Bosses', url: 'auto=morrow&god=1&lv=10&calm=1&boss=colossus', dur: 11, caps: [
+    [0.8, 'Boss fights', 'Bone Colossus · rings of bone and a second phase'],
+    [6.5, 'Read the telegraphs', 'Every attack warns you before it lands'] ] },
+  { group: 'Bosses', url: 'auto=nyx&god=1&lv=10&calm=1&boss=wyrm', dur: 9, caps: [
+    [0.8, 'The Frost Wyrm', 'Fourteen bosses, each with their own attacks'] ] },
+  { group: 'Bosses', url: 'auto=isolde&god=1&lv=14&calm=1&boss=herald', dur: 10, caps: [
+    [0.8, 'The Eclipse Herald', 'The final boss of the Long Night'] ] },
+  { group: 'Bosses', url: 'auto=brask&god=1&lv=14&dim=island', dur: 11, caps: [
+    [0.8, 'Boss Island', 'A gauntlet of bosses, one after another'] ] },
+
+  { group: 'Story', url: 'story=0&god=1', dur: 26, story: true, capPos: 'top', caps: [
+    [0.3, 'Story mode', 'The Long Night · six chapters, six heroes'],
+    [13, 'Every chapter tells its part of the tale', 'Narration, voiced characters, objectives'] ] },
+  { group: 'Story', url: 'story=4&god=1', dur: 12, story: true, capPos: 'top', caps: [
+    [0.3, 'Finish a chapter, unlock the next hero', 'Bosses arrive with their own title cards'] ] },
+
+  { group: 'Co-op', coop: true, dur: 20, caps: [
+    [1, 'Online co-op', 'One player creates a room, the other joins with a 4-letter code'],
+    [8, 'Survive together', 'Shared level-ups, shrines, dungeons and bosses'],
+    [14, 'Two heroes, two builds', 'Each player picks their own hero and upgrades'] ] },
+
+  { group: 'Outro', url: 'auto=sable&t=600&lv=26&evo=1&god=1', dur: 8, title: ['Out now on localhost', 'CINDERWAKE', 'Survive the Long Night'] },
+];
+
+const $ = id => document.getElementById(id);
+const A = $('gameA'), B = $('gameB');
+const TOTAL = SCENES.reduce((s, x) => s + x.dur, 0);
+const startsAt = SCENES.map((_, i) => SCENES.slice(0, i).reduce((s, x) => s + x.dur, 0));
+let idx = -1, t = 0, live = false, paused = false, muted = false, capShown = -1, lastNow = 0, loadToken = 0;
+
+// The demo must leave the player's own save untouched
+const SAVED = {};
+for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); SAVED[k] = localStorage.getItem(k); }
+function restoreSave() { try { for (const k in SAVED) localStorage.setItem(k, SAVED[k]); } catch (e) { /* storage blocked */ } }
+addEventListener('pagehide', restoreSave);
+
+/* Autopilot, evaluated inside the game frame so it can reach the game's own globals */
+const PILOT = (opts) => `(() => {
+  const o = ${JSON.stringify(opts)};
+  openPause = function () {};
+  let since = performance.now(), last = state, wander = Math.random() * 6.28, stuck = 0, lx = 0, ly = 0, home = null, dir = 1, dlast = 0, nextJump = 0, nextHit = 0;
+  const press = (code, ms = 90) => { dispatchEvent(new KeyboardEvent('keydown', { code })); setTimeout(() => dispatchEvent(new KeyboardEvent('keyup', { code })), ms); };
+  const setMove = (x, y) => { keys.KeyA = x < -0.38; keys.KeyD = x > 0.38; keys.KeyW = y < -0.38; keys.KeyS = y > 0.38; };
+  window.__pilot = setInterval(() => {
+    try {
+      const now = performance.now();
+      if (state !== last) { last = state; since = now; setMove(0, 0); }
+      const held = now - since;
+      if (state === 'levelup' && held > 1300) { if (Net.role === 'guest') guestPick(0); else pickChoice(0); }
+      else if (state === 'chest' && held > 1100 && !$('btnChest').disabled) revealChest();
+      else if (state === 'shrine' && held > 1400 && !shrineSpinning) { since = now; if (!$('btnPull').disabled) pullShrine(); }
+      else if (state === 'modal' && held > 2200 && typeof closeModal === 'function') closeModal();
+      else if (state === 'dialogue' && DLG) {
+        const line = DLG.lines[DLG.i][1];
+        if (DLG.shown >= line.length && held > 900 + line.length * 32) { advanceDialogue(); since = now; }
+      } else if (state === 'dungeon' && DP) {
+        keys.KeyD = dir > 0; keys.KeyA = dir < 0;
+        if (Math.abs(DP.x - lx) < 0.5) { stuck += 1; if (stuck > 14) { dir = -dir; stuck = 0; press('Space', 260); } } else stuck = 0;
+        lx = DP.x;
+        if (now > nextJump) { press('Space', 200 + Math.random() * 200); nextJump = now + 900 + Math.random() * 1400; }
+        if (now > nextHit) { press('KeyJ'); nextHit = now + 380; }
+        if (Math.random() < 0.01) press('ShiftLeft');
+      } else if (state === 'play' && ME && G) {
+        if (!home) home = { x: ME.x, y: ME.y };
+        wander += (Math.random() - 0.5) * 0.25;
+        let vx = Math.cos(wander) * 0.8, vy = Math.sin(wander) * 0.8;
+        for (const e of G.enemies) {
+          if (e.prop || e.dead) continue;
+          const dx = ME.x - e.x, dy = ME.y - e.y, d2 = dx * dx + dy * dy;
+          if (d2 < 9000 && d2 > 1) { const k = (e.boss ? 3 : 1) * 30 / d2; vx += dx * k; vy += dy * k; }
+        }
+        const hx = home.x - ME.x, hy = home.y - ME.y, hd = Math.hypot(hx, hy), leash = o.home ? 40 : 260;
+        if (hd > leash) { vx += hx / hd * (hd - leash) / 30; vy += hy / hd * (hd - leash) / 30; }
+        if (Math.hypot(ME.x - lx, ME.y - ly) < 0.3) { if (++stuck > 10) { wander += 2.4; stuck = 0; } } else stuck = 0;
+        lx = ME.x; ly = ME.y;
+        if (o.home && hd < 26 && Math.random() < 0.5) { vx *= 0.2; vy *= 0.2; }
+        setMove(vx, vy);
+      }
+    } catch (e) { /* frame still loading */ }
+  }, 100);
+  if (${muted}) { Snd.init(); Snd.setVol('sfx', 0); Snd.setVol('mus', 0); }
+  else { Snd.init(); applyVolume(); }
+})()`;
+
+function inject(frame, opts) {
+  try {
+    frame.contentWindow.eval(PILOT(opts));
+    if (opts.title) { const st = frame.contentDocument.createElement('style'); st.textContent = '#banner, #titlecard, #mute { display: none !important; }'; frame.contentDocument.head.appendChild(st); }
+  } catch (e) { /* not ready */ }
+}
+
+/* ---------- Track ---------- */
+const track = $('track');
+const groups = [];
+SCENES.forEach((s, i) => { if (!groups.length || groups[groups.length - 1].name !== s.group) groups.push({ name: s.group, from: i, dur: 0 }); groups[groups.length - 1].dur += s.dur; });
+for (const g of groups) {
+  const b = document.createElement('button');
+  b.className = 'seg'; b.style.flex = g.dur; b.innerHTML = `<i></i><span>${g.name}</span>`; b.title = 'Jump to ' + g.name;
+  b.onclick = () => { if (live) go(g.from); };
+  g.el = b; track.appendChild(b);
+}
+const fmt = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+
+/* ---------- Playback ---------- */
+function go(i) {
+  restoreSave();
+  idx = i; t = 0; capShown = -1;
+  const s = SCENES[i], token = ++loadToken;
+  $('fade').classList.remove('clear');
+  $('cap').innerHTML = '';
+  $('title').classList.remove('on');
+  setTimeout(() => {
+    if (token !== loadToken) return;
+    $('frame').classList.toggle('split', !!s.coop);
+    $('cap').className = s.capPos === 'top' ? 'top' : '';
+    const loaded = () => {
+      if (token !== loadToken) return;
+      inject(A, s);
+      if (s.coop) inject(B, s);
+      setTimeout(() => { if (token === loadToken) $('fade').classList.add('clear'); }, 250);
+    };
+    if (s.coop) {
+      const code = roomCode();
+      A.onload = () => { B.src = `index.html?coopjoin=${code}&char=isolde&god=1`; };
+      B.onload = () => setTimeout(loaded, 900);
+      A.src = `index.html?coophost=${code}&char=wren&god=1`;
+    } else {
+      B.onload = null; B.src = 'about:blank';
+      A.onload = loaded;
+      A.src = 'index.html' + (s.url ? '?' + s.url : '');
+    }
+  }, 450);
+  if (s.title) setTimeout(() => {
+    if (token !== loadToken) return;
+    $('title').innerHTML = `${s.title[0] ? `<div class="kick">${s.title[0]}</div>` : ''}<div class="big">${s.title[1]}</div><div class="line">${s.title[2]}</div>`;
+    $('title').classList.add('on');
+  }, 700);
+}
+
+function showCaption(s, k) {
+  const [, h, sub] = s.caps[k];
+  const el = $('cap');
+  const put = () => { el.classList.remove('out'); el.innerHTML = `<div class="h">${h}</div>${sub ? `<div class="s">${sub}</div>` : ''}`; };
+  if (el.innerHTML) { el.classList.add('out'); setTimeout(put, 350); } else put();
+}
+
+function tick(now) {
+  const dt = Math.min(0.1, (now - lastNow) / 1000); lastNow = now;
+  if (live && !paused && $('fade').classList.contains('clear')) {
+    const s = SCENES[idx];
+    t += dt;
+    if (s.caps) {
+      let k = -1; for (let j = 0; j < s.caps.length; j++) if (t >= s.caps[j][0]) k = j;
+      if (k !== capShown && k >= 0) { capShown = k; showCaption(s, k); }
+      if (t > s.dur - 0.9 && $('cap').innerHTML && !$('cap').classList.contains('out')) $('cap').classList.add('out');
+    }
+    if (t >= s.dur) { if (idx + 1 < SCENES.length) go(idx + 1); else end(); }
+  }
+  const el = live && idx >= 0 ? startsAt[idx] + Math.min(t, SCENES[idx].dur) : 0;
+  for (const g of groups) {
+    const g0 = startsAt[g.from];
+    g.el.firstChild.style.width = Math.max(0, Math.min(1, (el - g0) / g.dur)) * 100 + '%';
+  }
+  $('clock').textContent = `${fmt(el)} / ${fmt(TOTAL)}`;
+  requestAnimationFrame(tick);
+}
+
+function end() {
+  live = false;
+  restoreSave();
+  $('start').querySelector('p').textContent = 'That was Cinderwake. Every scene was live gameplay.';
+  $('go').textContent = 'Watch again';
+  $('start').classList.remove('hidden'); $('start').style.display = '';
+}
+
+function forEachFrame(fn) { for (const f of [A, B]) { try { if (f.contentWindow && f.src && !f.src.endsWith('about:blank')) fn(f.contentWindow); } catch (e) { /* cross-frame */ } } }
+
+$('go').onclick = () => {
+  $('start').style.display = 'none';
+  live = true; paused = false; $('play').textContent = 'Pause';
+  go(0);
+};
+$('play').onclick = () => {
+  if (!live) return;
+  paused = !paused;
+  $('play').textContent = paused ? 'Play' : 'Pause';
+  // Freeze the game itself by dropping it into its pause state, and bring it back
+  forEachFrame(w => w.eval(paused
+    ? `if (state === 'play' || state === 'dungeon') { G.pausedFrom = state; setState('pause'); }`
+    : `if (state === 'pause') setState(G.pausedFrom || 'play');`));
+};
+$('mute').onclick = () => {
+  muted = !muted;
+  $('mute').textContent = muted ? 'Sound off' : 'Sound on';
+  forEachFrame(w => w.eval(muted ? `Snd.setVol('sfx', 0); Snd.setVol('mus', 0);` : `applyVolume();`));
+};
+addEventListener('keydown', e => {
+  if (!live) return;
+  if (e.code === 'Space') { e.preventDefault(); $('play').click(); }
+  if (e.code === 'ArrowRight') go(Math.min(SCENES.length - 1, idx + 1));
+  if (e.code === 'ArrowLeft') go(Math.max(0, idx - 1));
+  if (e.code === 'KeyM') $('mute').click();
+});
+requestAnimationFrame(now => { lastNow = now; tick(now); });
+</script>
+</body>
+</html>

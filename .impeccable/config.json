@@ -1,0 +1,47 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "broken-image",
+        "value": "*",
+        "files": [
+          "cinderwake/index.html"
+        ],
+        "createdAt": "2026-10-30T18:09:24.736Z",
+        "reason": "Claude: img src is set at runtime from generated pixel-sprite data URLs (data-icon)"
+      },
+      {
+        "rule": "dark-glow",
+        "value": "*",
+        "files": [
+          "cinderwake/index.html"
+        ],
+        "createdAt": "2026-10-30T18:09:24.974Z",
+        "reason": "Claude: in-world light (treasure/evolution glow) in a pixel-art game, domain-appropriate"
+      },
+      {
+        "rule": "bounce-easing",
+        "value": "cubic-bezier(.2, 1.6, .4, 1)",
+        "createdAt": "2026-10-30T18:26:18.348Z",
+        "reason": "Claude: intentional overshoot 'juice' on level-up title/cards in a pixel-art arcade game"
+      },
+      {
+        "rule": "bounce-easing",
+        "value": "cubic-bezier(.2, 1.4, .4, 1)",
+        "createdAt": "2026-10-30T18:26:18.722Z",
+        "reason": "Claude: intentional overshoot 'juice' on level-up/reward cards in a pixel-art arcade game"
+      },
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "cinderwake/index.html"
+        ],
+        "createdAt": "2026-10-30T18:26:18.996Z",
+        "reason": "Claude: flagged rules are top/bottom pixel bevels on the XP and boss HP bars, not card side accents"
+      }
+    ]
+  }
+}
