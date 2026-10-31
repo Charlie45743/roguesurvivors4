@@ -97,7 +97,7 @@ cv.addEventListener('wheel', e => {
 cv.addEventListener('pointerdown', e => {
   if (!G || (state !== 'play')) return;
   const [x, y] = canvasPos(e);
-  if (x >= 4 && x <= 68 && y >= H - 68 && y <= H - 4) { G.mapOpen ? closeMap() : openMap(); }
+  if (x >= 4 && x <= 100 && y >= H - 100 && y <= H - 4) { G.mapOpen ? closeMap() : openMap(); }
 });
 Mods.add({
   key(e) {

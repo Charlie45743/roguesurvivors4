@@ -655,30 +655,50 @@ function drawEventGround(now) {
 
 /* ---------- Minimap ---------- */
 function drawMinimap(now) {
-  const S = 60, x0 = 6, y0 = H - S - 6, scale = 1 / 22, cx = x0 + S / 2, cy = y0 + S / 2;
-  ctx.globalAlpha = 0.85;
-  ctx.fillStyle = '#0b0a12'; ctx.fillRect(x0 - 2, y0 - 2, S + 4, S + 4);
-  ctx.fillStyle = '#15131f'; ctx.fillRect(x0, y0, S, S);
-  ctx.globalAlpha = 1;
-  const dot = (wx, wy, c, sz = 2) => {
-    const mx = cx + (wx - ME.x) * scale, my = cy + (wy - ME.y) * scale;
-    if (mx < x0 || mx > x0 + S - sz || my < y0 || my > y0 + S - sz) return;
+  const S = 88, x0 = 8, y0 = H - S - 8, scale = 1 / 20, cx = x0 + S / 2, cy = y0 + S / 2;
+  // frame
+  ctx.fillStyle = '#0b0a12'; ctx.fillRect(x0 - 3, y0 - 3, S + 6, S + 6);
+  ctx.fillStyle = '#36304f'; ctx.fillRect(x0 - 2, y0 - 2, S + 4, S + 4);
+  ctx.fillStyle = '#0d0c16'; ctx.fillRect(x0, y0, S, S);
+  ctx.save();
+  ctx.beginPath(); ctx.rect(x0, y0, S, S); ctx.clip();
+  // explored ground, coloured by biome like the big map
+  const set = exSet(), half = Math.ceil(S / 2 / scale / EX_C) + 1, ccx = Math.floor(ME.x / EX_C), ccy = Math.floor(ME.y / EX_C), cs = Math.ceil(EX_C * scale) + 1;
+  G.mapCol = G.mapCol || {};
+  for (let i = -half; i <= half; i++) for (let j = -half; j <= half; j++) {
+    const gx = ccx + i, gy = ccy + j, key = exKey(gx, gy);
+    if (!set.has(key)) continue;
+    const ck = (G.dim || 'w') + key;
+    const col = G.mapCol[ck] || (G.mapCol[ck] = MAPCOL[biomeAt(gx * EX_C + EX_C / 2, gy * EX_C + EX_C / 2)] || '#3a3a48');
+    ctx.fillStyle = col; ctx.fillRect(Math.floor(cx + (gx * EX_C - ME.x) * scale), Math.floor(cy + (gy * EX_C - ME.y) * scale), cs, cs);
+  }
+  // what you can see on screen right now
+  ctx.strokeStyle = 'rgba(242,238,230,.35)'; ctx.lineWidth = 1;
+  const vw = W * scale, vh = H * scale;
+  ctx.strokeRect(Math.round(cx - vw / 2) + .5, Math.round(cy - vh / 2) + .5, Math.round(vw), Math.round(vh));
+  const dot = (wx, wy, c, sz = 2, edge = false) => {
+    let mx = cx + (wx - ME.x) * scale, my = cy + (wy - ME.y) * scale;
+    const out = mx < x0 + 3 || mx > x0 + S - 3 || my < y0 + 3 || my > y0 + S - 3;
+    if (out) { if (!edge) return; mx = clamp(mx, x0 + 4, x0 + S - 4); my = clamp(my, y0 + 4, y0 + S - 4); }
+    ctx.fillStyle = '#0b0a12'; ctx.fillRect(Math.round(mx - sz / 2) - 1, Math.round(my - sz / 2) - 1, sz + 2, sz + 2);
     ctx.fillStyle = c; ctx.fillRect(Math.round(mx - sz / 2), Math.round(my - sz / 2), sz, sz);
   };
   if (!noStructs()) {
     const witch = ME.relics?.includes('witchEye');
     for (const st of structsNear(ME.x, ME.y, 2)) {
       const seen = st.built || G.revealed?.has(st.id) || witch;
-      if (seen && !(st.done && st.type !== 'village')) dot(st.x, st.y, st.ruined ? '#5e557f' : STRUCT_COL[st.type], st.type === 'town' ? 5 : 3);
+      if (seen && !(st.done && st.type !== 'village')) dot(st.x, st.y, st.ruined ? '#8a80b0' : STRUCT_COL[st.type], st.type === 'town' ? 6 : 4);
     }
-    for (const s of G.shrines) if (s.uses > 0) dot(s.x, s.y, '#e27bf0');
-    for (const c of G.crypts) dot(c.x, c.y, '#e8742c');
+    for (const s of G.shrines) if (s.uses > 0) dot(s.x, s.y, '#e27bf0', 3);
+    for (const c of G.crypts) dot(c.x, c.y, '#e8742c', 3);
   }
   Mods.call('minimap', dot);
-  if (G.ev && G.ev.x !== undefined) dot(G.ev.x, G.ev.y, Math.floor(now * 4) % 2 ? '#fff3b0' : '#d8354a', 3);
-  for (const e of G.enemies) if (e.boss && !e.dead) dot(e.x, e.y, '#d8354a', 3);
-  for (const pl of G.players) if (pl !== ME) dot(pl.x, pl.y, '#3f8ee0', 3);
-  ctx.fillStyle = '#fff'; ctx.fillRect(cx - 1, cy - 1, 3, 3);
+  if (G.ev && G.ev.x !== undefined) dot(G.ev.x, G.ev.y, Math.floor(now * 4) % 2 ? '#fff3b0' : '#d8354a', 4, true);
+  for (const e of G.enemies) if (e.boss && !e.dead) dot(e.x, e.y, '#d8354a', 4, true);
+  for (const pl of G.players) if (pl !== ME) dot(pl.x, pl.y, '#3f8ee0', 4, true);
+  ctx.restore();
+  ctx.fillStyle = '#0b0a12'; ctx.fillRect(cx - 3, cy - 3, 7, 7);
+  ctx.fillStyle = Math.floor(now * 3) % 2 ? '#ffffff' : '#ffd35a'; ctx.fillRect(cx - 2, cy - 2, 5, 5);
 }
 
 /* ---------- Module wiring ---------- */
