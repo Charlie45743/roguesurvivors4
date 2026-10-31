@@ -239,6 +239,7 @@ input[type=range] { accent-color: var(--ember); width: 140px; }
 #dpad.roll-only .btn:not([data-act="roll"]) { display: none; }
 /* Split-screen level-up: one pane per player, over their own half of the screen */
 #luSplit { position: fixed; inset: 0; }
+#levelup:not(.split) #luSplit { display: none; }   /* otherwise this empty layer sits over the normal cards and eats every click */
 #levelup.split > :not(#luSplit) { display: none; }
 .lpane { position: absolute; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 12px; box-shadow: inset 0 0 0 2px var(--line); }
 .lpane.done { background: rgba(11,10,18,.55); }
@@ -551,29 +552,33 @@ button.pane.open:hover { opacity: 1; background: var(--panel2); }
 window.__errs = [];
 window.addEventListener('error', e => { window.__errs.push(e.message + ':' + e.lineno); document.getElementById('err').textContent += (e.message + ' @' + (e.filename || '').split('/').pop() + ':' + e.lineno + '\n'); });
 </script>
-<script src="js/sprites.js?v=5"></script>
-<script src="js/audio.js?v=5"></script>
-<script src="js/data.js?v=5"></script>
-<script src="js/game.js?v=5"></script>
-<script src="js/art.js?v=5"></script>
-<script src="js/dungeon.js?v=5"></script>
-<script src="js/dungeon2.js?v=5"></script>
-<script src="js/bosses.js?v=5"></script>
-<script src="js/bossfx.js?v=5"></script>
-<script src="js/bossart.js?v=5"></script>
-<script src="js/structures.js?v=5"></script>
-<script src="js/powerups.js?v=5"></script>
-<script src="js/towns.js?v=5"></script>
-<script src="js/dims.js?v=5"></script>
-<script src="js/story.js?v=5"></script>
-<script src="js/allies.js?v=5"></script>
-<script src="js/sites.js?v=5"></script>
-<script src="js/dungeon3.js?v=5"></script>
-<script src="js/world.js?v=5"></script>
+<script src="js/sprites.js?v=6"></script>
+<script src="js/audio.js?v=6"></script>
+<script src="js/data.js?v=6"></script>
+<script src="js/game.js?v=6"></script>
+<script src="js/art.js?v=6"></script>
+<script src="js/dungeon.js?v=6"></script>
+<script src="js/dungeon2.js?v=6"></script>
+<script src="js/bosses.js?v=6"></script>
+<script src="js/bossfx.js?v=6"></script>
+<script src="js/bossart.js?v=6"></script>
+<script src="js/structures.js?v=6"></script>
+<script src="js/powerups.js?v=6"></script>
+<script src="js/towns.js?v=6"></script>
+<script src="js/dims.js?v=6"></script>
+<script src="js/story.js?v=6"></script>
+<script src="js/allies.js?v=6"></script>
+<script src="js/sites.js?v=6"></script>
+<script src="js/dungeon3.js?v=6"></script>
+<script src="js/world.js?v=6"></script>
+<script src="js/cine.js?v=6"></script>
+<script src="js/ldbosses.js?v=6"></script>
+<script src="js/lastdawn.js?v=6"></script>
+<script src="js/ldch1.js?v=6"></script>
 <script src="https://cdn.jsdelivr.net/npm/nostr-tools@2.7.2/lib/nostr.bundle.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/5.3.4/mqtt.min.js"></script>
-<script src="js/net.js?v=5"></script>
-<script src="js/local.js?v=5"></script>
-<script src="js/devhooks.js?v=5"></script>
+<script src="js/net.js?v=6"></script>
+<script src="js/local.js?v=6"></script>
+<script src="js/devhooks.js?v=6"></script>
 </body>
 </html>

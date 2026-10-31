@@ -236,14 +236,14 @@ const C = {
   /* cutscene mode */
   cine(on) {
     if (on) {
+      if (!Cine.free) { Cine.cam.x = camX + W / 2; Cine.cam.y = camY + H / 2; }
       Cine.on = true; Cine.free = true; Cine.letterTo = 1;
-      Cine.cam.x = Cine.cam.x || ME.x; Cine.cam.y = Cine.cam.y || ME.y;
       if (state === 'play') setState('cine');
       $('barks').innerHTML = ''; Cine.barks.length = 0;
       return tween(Cine, 'letter', 1, 0.6, 'out');
     }
     Cine.letterTo = 0; Cine.follow = null;
-    const w = C.all(tween(Cine, 'letter', 0, 0.6, 'out'), tween(Cine.cam, 'z', 1, 0.6));
+    const w = C.all(tween(Cine, 'letter', 0, 0.6, 'out'), tween(Cine.cam, 'z', 1, 0.6), tween(Cine.cam, 'x', ME.x, 0.6), tween(Cine.cam, 'y', ME.y - 4, 0.6));
     return tick(dt => {
       if (!w.upd(dt)) return false;
       Cine.on = false; Cine.free = false; Camp.skipping = false; Cine.sim = false;
@@ -341,7 +341,7 @@ function pushBark(who, text, dur) {
   renderBarks();
 }
 function renderBarks() {
-  $('barks').innerHTML = Cine.barks.map(b => { const sp = SPEAKERS[b.who] || SPEAKERS.voice; return `<div class="bark"><b style="color:${sp.color || '#f2eee6'}">${sp.name || ''}</b> ${b.text}</div>`; }).join('');
+  $('barks').innerHTML = Cine.barks.map(b => { const sp = SPEAKERS[b.who]; return `<div class="bark"><b style="color:${sp ? sp.color || '#f2eee6' : '#c9c2e0'}">${sp ? sp.name : b.who}</b> ${b.text}</div>`; }).join('');
 }
 
 /* ---------- Per-frame ---------- */

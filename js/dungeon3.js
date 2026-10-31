@@ -401,7 +401,7 @@ updateCrypt = function (dt) {
   dungeonUpdate(dt);
   if (!D || D.dead) return;
   // the way down: after clearing the last floor, the door leads deeper for far greater rewards
-  if (D.last && D.cleared === true && D.doorAt && (D.deep || 0) < MAX_DEEP) { const b = bodyNear(D.doorAt.x, D.doorAt.y, 10, 16); if (b) asBody(b, descendCrypt); }
+  if (D.last && D.cleared === true && D.doorAt && (D.deep || 0) < MAX_DEEP && !D.noDeeper) { const b = bodyNear(D.doorAt.x, D.doorAt.y, 10, 16); if (b) asBody(b, descendCrypt); }
 };
 function descendCrypt() {
   const deep = D.deep || 0, T = THEMES[D.theme];
@@ -433,7 +433,7 @@ updateCryptHud = function () {
   if (key === D.hudKey) return;
   D.hudKey = key;
   const deep = D.deep || 0, dive = deep ? `  ·  depth ${deep + 1}, loot x${(1 + 0.9 * deep).toFixed(1)}` : '';
-  $('dInfo').textContent = (D.cleared === true ? (D.last && deep < MAX_DEEP ? 'Cleared. Take the chest, or dive deeper' : 'Cleared. Claim the chest')
+  $('dInfo').textContent = (D.cleared === true ? (D.last && deep < MAX_DEEP && !D.noDeeper ? 'Cleared. Take the chest, or dive deeper' : 'Cleared. Claim the chest')
     : D.cleared === 'gated' ? 'Pull every lever to open the gate'
     : `${left} foe${left === 1 ? '' : 's'} left  ·  ${fmtTime(D.t)}${D.t <= CRYPT_PAR * (D.floor || 1) ? `  ·  swift bonus under ${fmtTime(CRYPT_PAR * (D.floor || 1))}` : ''}`) + dive;
   $('goldc').textContent = G.gold;
@@ -486,7 +486,7 @@ renderCrypt = function () {
     ctx.fillStyle = '#ffd35a'; ctx.fillRect(sx - 3, sy, 7, 3); ctx.fillRect(sx - 3, sy - 2, 1, 2); ctx.fillRect(sx, sy - 3, 1, 3); ctx.fillRect(sx + 3, sy - 2, 1, 2);
     light(e.x, e.y - e.h / 2, 20, 0.35);
   }
-  if (D.last && D.cleared === true && D.doorAt && (D.deep || 0) < MAX_DEEP) {
+  if (D.last && D.cleared === true && D.doorAt && (D.deep || 0) < MAX_DEEP && !D.noDeeper) {
     const x = D.doorAt.x, y = D.doorAt.y;
     light(x, y - 8, 46, 0.9); glowAt(x, y - 6, 16, '#d8354a', 0.55 + Math.sin(now * 5) * 0.2);
     if (Math.floor(now * 3) % 2) drawText(ctx, 'DEEPER', x - camX, y - camY - 26, '#ff6a7a');
