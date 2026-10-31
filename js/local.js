@@ -8,15 +8,15 @@ SCREENS.push('localco');
 
 const KB_DEVS = [
   { kind: 'kb', name: 'WASD', up: 'KeyW', down: 'KeyS', left: 'KeyA', right: 'KeyD', act: 'KeyE', back: 'KeyQ', hint: 'E',
-    nav: 'A D change · W S options · E ready · Q leave',
+    nav: 'A D change · W S options · E ready · Q leave', lv: 'A D browse · E pick · W reroll',
     cry: { left: ['KeyA'], right: ['KeyD'], down: ['KeyS'], jump: ['KeyW', 'Space'], attack: ['KeyE', 'KeyJ'], roll: ['KeyQ', 'ShiftLeft'] },
     controls: [['Move', 'W A S D'], ['Interact', 'E'], ['Level-up menu', 'A D to browse · E to pick'], ['Crypts', 'W jump · E attack · Q roll']], leave: 'Q' },
   { kind: 'kb', name: 'Arrow keys', up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight', act: 'Slash', back: 'Period', hint: '/',
-    nav: 'Left Right change · Up Down options · / ready · Period leave',
+    nav: 'Left Right change · Up Down options · / ready · Period leave', lv: 'Left Right browse · / pick · Up reroll',
     cry: { left: ['ArrowLeft'], right: ['ArrowRight'], down: ['ArrowDown'], jump: ['ArrowUp'], attack: ['Slash', 'KeyX'], roll: ['Period', 'ShiftRight'] },
     controls: [['Move', 'Arrow keys'], ['Interact', '/'], ['Level-up menu', 'Left Right to browse · / to pick'], ['Crypts', 'Up jump · / attack · Period roll']], leave: 'Period key' },
 ];
-const MOUSE_DEV = { kind: 'mouse', name: 'Mouse', hint: 'R-CLICK', nav: 'Click the arrows and buttons',
+const MOUSE_DEV = { kind: 'mouse', name: 'Mouse', hint: 'R-CLICK', nav: 'Click the arrows and buttons', lv: 'Click a card, or hover and right click',
   controls: [['Move', 'Hold left click and drag'], ['Interact', 'Right click'], ['Level-up menu', 'Click a card, or hover and right click'], ['Crypts', 'Drag to move · Roll, Jump and Hit buttons']], leave: 'Leave button' };
 const LOCAL_MENU_STATES = ['levelup', 'chest', 'shrine'];
 const MAX_SEATS = 4;
@@ -54,7 +54,7 @@ function padDevice(gp) {
   const ps = /054c|playstation|dualshock|dualsense/i.test(gp.id), xbox = /xbox|045e|xinput/i.test(gp.id);
   const hint = ps ? 'X' : 'A';
   return { kind: 'pad', pad: gp.index, name: ps ? 'PlayStation controller' : xbox ? 'Xbox controller' : 'Controller ' + (gp.index + 1), hint,
-    nav: `D-pad change · ${hint} ready · ${ps ? 'Circle' : 'B'} leave`,
+    nav: `D-pad change · ${hint} ready · ${ps ? 'Circle' : 'B'} leave`, lv: `D-pad browse · ${hint} pick · up reroll`,
     controls: [['Move', 'Left stick or D-pad'], ['Interact', hint], ['Level-up menu', `D-pad to browse · ${hint} to pick`], ['Crypts', `${hint} attack · ${ps ? 'Circle' : 'B'} roll · ${ps ? 'Square' : 'X'} or Up jump`]], leave: ps ? 'Circle' : 'B' };
 }
 function firstFreeChar() {
@@ -257,7 +257,7 @@ function interactFor(pl) {
 }
 // A menu belongs to one player at a time: whoever is choosing an upgrade, or whose chest it is. Everyone else is frozen out of it.
 const menuOwner = () => !G || !G.local ? null : state === 'levelup' ? G.chooser : state === 'chest' && G.chest ? G.chest.owner : null;
-const menuAct = pl => { const o = menuOwner(); if (o && o !== pl) return; asPlayer(pl, () => onKey(fakeKey('Enter'))); };
+const menuAct = pl => { if (G.lvSplit && state === 'levelup') { splitAct(pl); return; } const o = menuOwner(); if (o && o !== pl) return; asPlayer(pl, () => onKey(fakeKey('Enter'))); };
 // A click on a menu counts when nobody holds the mouse, or when it is the mouse player's turn
 const menuClickOk = () => { const o = menuOwner(), m = mousePlayer(); return !o || !m || o === m; };
 
@@ -287,6 +287,7 @@ function pollPads() {
     if (!G || !G.local) continue;
     const pl = G.players.find(p => p.dev && p.dev.kind === 'pad' && p.dev.pad === gp.index);
     if (!pl) continue;
+    if (state === 'levelup' && G.lvSplit) { if (stepX) splitMove(pl, stepX); else if (stepY < 0) splitReroll(pl); if (pressA) splitAct(pl); continue; }
     if (state === 'levelup' && stepX && pl === G.chooser) onKey(fakeKey(stepX < 0 ? 'ArrowLeft' : 'ArrowRight'));
     if (!pressA) continue;
     if (state === 'play') interactFor(pl);
@@ -309,6 +310,7 @@ function lobbyKey(e) {
 function localKey(e) {
   if (state === 'localco') return lobbyKey(e);
   if (!G || !G.local) return false;
+  if (state === 'levelup' && G.lvSplit) return splitKey(e);
   const owner = menuOwner();
   if (owner && !e.synthetic && !['KeyM', 'Escape', 'KeyP'].includes(e.code)) {
     // while one player picks, the other players' keys do nothing
@@ -326,13 +328,16 @@ function localKey(e) {
 Mods.add({
   key(e) { return localKey(e); },
   input() { pollPads(); },
+  levelUp() { return openSplitLevelUp(); },
   frame(st, dt) {
+    if (st === 'levelup' && G && G.lvDoneT > 0) { G.lvDoneT -= dt; if (G.lvDoneT <= 0) finishSplitLevel(); }
     if (st !== 'localco') return;
     promptT += dt;
     if (promptT > 1.8) { promptT = 0; promptIdx++; $('seats').querySelectorAll('.joinprompt').forEach(showPrompt); }
     if (launching > 0) { launching -= dt; if (launching <= 0) startLocal(); }
   },
   state(s) {
+    if (s !== 'levelup') $('levelup').classList.remove('split');
     const box = $('pauseControls');
     if (s === 'pause' && G && G.local) {
       box.innerHTML = G.players.map((p, i) => `<div class="pctl p${i}"><b>Player ${i + 1} · ${p.ch.name} · ${p.dev.name}</b>${controlsHtml(p.dev, false)}</div>`).join('');
@@ -356,6 +361,116 @@ document.addEventListener('click', () => {
   if (pl && pl !== P && LOCAL_MENU_STATES.includes(state)) { P = pl; clickSwap = true; }
 }, true);
 document.addEventListener('click', () => { if (clickSwap) { clickSwap = false; P = ME; } });
+
+/* ---------- Split-screen level-up ---------- */
+// Every standing player gets their own choices on their own half of the screen. The night stays frozen until all of them have picked.
+const paneOf = pl => G.lvSplit && G.lvSplit.find(p => p.pl === pl);
+function paneRect(i, n) { return n === 2 ? { left: i * 50, top: 0, w: 50, h: 100 } : { left: (i % 2) * 50, top: (i >> 1) * 50, w: 50, h: 50 }; }
+function openSplitLevelUp() {
+  if (!G.local || G.players.length < 2) return false;
+  const stand = G.players.filter(p => !p.down);
+  G.chooser = null;
+  G.lvSplit = (stand.length ? stand : [ME]).map(pl => ({ pl, choices: withPlayer(pl, () => rollChoices(Math.random() < 0.2 ? 4 : 3)), sel: 0, done: false, picked: null, anim: true }));
+  G.lvDoneT = 0;
+  setState('levelup');
+  Snd.play('levelup');
+  $('xpbar').classList.add('flash');
+  $('levelup').classList.add('split');
+  renderSplitLevel();
+  return true;
+}
+function splitCard(pane, c, j) {
+  const info = withPlayer(pane.pl, () => choiceInfo(c));
+  return `<button class="card${j === pane.sel ? ' sel' : ''}" data-ch="${j}"${pane.anim ? ` style="animation-delay:${j * 0.06}s"` : ' style="animation:none"'}>
+    <div class="top"><div class="ic"><img src="${ICON_URL[info.icon]}" alt=""></div><div><div class="name">${info.name}</div><div class="lv ${info.cls || ''}">${info.lv}</div></div></div>
+    <div class="desc">${info.desc}</div>${info.hint ? `<div class="hint"><img src="${ICON_URL[info.hintIcon]}" alt="">${info.hint}</div>` : ''}</button>`;
+}
+function renderSplitLevel() {
+  const n = G.players.length;
+  $('luSplit').innerHTML = G.lvSplit.map(pane => {
+    const i = G.players.indexOf(pane.pl), r = paneRect(i, n), col = PLAYER_COLORS[i % PLAYER_COLORS.length];
+    const body = pane.done
+      ? `<div class="lpicked">${pane.picked ? `<img src="${ICON_URL[pane.picked.icon]}" alt=""> ${pane.picked.name}` : 'Skipped'}</div><div class="lfoot">Waiting for the others...</div>`
+      : `<div class="lcards">${pane.choices.map((c, j) => splitCard(pane, c, j)).join('')}</div>
+        <div class="lbtns"><button class="btn ghost" data-do="reroll"${G.rerolls <= 0 ? ' disabled' : ''}>Reroll (${G.rerolls})</button><button class="btn ghost" data-do="skip">Skip</button></div>
+        <div class="lfoot">${pane.pl.dev.lv}</div>`;
+    pane.anim = false;
+    return `<div class="lpane${pane.done ? ' done' : ''}" data-pl="${i}" style="left:${r.left}%;top:${r.top}%;width:${r.w}%;height:${r.h}%">
+      <div class="lhead">Level up!</div><div class="lwho" style="color:${col}">Player ${i + 1} · ${pane.pl.ch.name}</div>${body}</div>`;
+  }).join('');
+}
+function splitMove(pl, d) {
+  const pane = paneOf(pl);
+  if (!pane || pane.done) return;
+  pane.sel = (pane.sel + d + pane.choices.length) % pane.choices.length;
+  markSplitSel(pane);
+  Snd.play('hover');
+}
+function markSplitSel(pane) {
+  const el = $('luSplit').querySelector(`[data-pl="${G.players.indexOf(pane.pl)}"]`);
+  if (el) [...el.querySelectorAll('[data-ch]')].forEach((c, j) => c.classList.toggle('sel', j === pane.sel));
+}
+function finishPane(pane, info) {
+  pane.done = true; pane.picked = info;
+  renderSplitLevel();
+  if (G.lvSplit.every(p => p.done)) G.lvDoneT = 0.7;
+}
+function splitPick(pl, j) {
+  const pane = paneOf(pl), c = pane && !pane.done && pane.choices[j];
+  if (!c) return;
+  const info = withPlayer(pl, () => choiceInfo(c));   // read before it is applied, while the card still describes the upgrade
+  Snd.play('select');
+  withPlayer(pl, () => applyChoice(c));
+  refreshSlots();
+  finishPane(pane, info);
+}
+const splitAct = pl => { const pane = paneOf(pl); if (pane) splitPick(pl, pane.sel); };
+function splitReroll(pl) {
+  const pane = paneOf(pl);
+  if (!pane || pane.done || G.rerolls <= 0) return;
+  G.rerolls--; Snd.play('select');
+  pane.choices = withPlayer(pl, () => rollChoices(pane.choices.length));
+  pane.sel = 0; pane.anim = true;
+  renderSplitLevel();
+}
+function splitSkip(pl) { const pane = paneOf(pl); if (pane && !pane.done) { Snd.play('select'); finishPane(pane, null); } }
+function finishSplitLevel() {
+  G.lvSplit = null;
+  $('levelup').classList.remove('split');
+  $('luSplit').innerHTML = '';
+  G.pending--;
+  if (G.pending > 0) { openSplitLevelUp(); return; }
+  $('xpbar').classList.remove('flash');
+  setState('play');
+  levelShock();
+}
+// Each key set drives its own pane; every other key is swallowed so the shared level-up screen never sees it
+function splitKey(e) {
+  if (e.code === 'KeyM') return false;
+  e.preventDefault();
+  if (e.repeat) return true;
+  const pl = G.players.find(p => p.dev && p.dev.kind === 'kb' && [p.dev.left, p.dev.right, p.dev.up, p.dev.act].includes(e.code));
+  if (!pl) return true;
+  const d = pl.dev;
+  if (e.code === d.left) splitMove(pl, -1);
+  else if (e.code === d.right) splitMove(pl, 1);
+  else if (e.code === d.up) splitReroll(pl);
+  else splitAct(pl);
+  return true;
+}
+$('luSplit').onclick = e => {
+  const paneEl = e.target.closest('.lpane');
+  if (!paneEl) return;
+  const pl = G.players[+paneEl.dataset.pl], btn = e.target.closest('[data-do]'), card = e.target.closest('[data-ch]');
+  if (btn) { if (btn.dataset.do === 'reroll') splitReroll(pl); else splitSkip(pl); }
+  else if (card) splitPick(pl, +card.dataset.ch);
+};
+$('luSplit').onmouseover = e => {
+  const paneEl = e.target.closest('.lpane'), card = e.target.closest('[data-ch]');
+  if (!paneEl || !card) return;
+  const pane = paneOf(G.players[+paneEl.dataset.pl]);
+  if (pane && !pane.done && pane.sel !== +card.dataset.ch) { pane.sel = +card.dataset.ch; markSplitSel(pane); Snd.play('hover'); }
+};
 
 /* ---------- Split screen ---------- */
 // Draws the night once per player into its own part of the canvas. W and H shrink to that part while it draws.

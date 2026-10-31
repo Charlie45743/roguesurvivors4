@@ -213,7 +213,28 @@ function collideSolids(e, r) {
 /* ---------- Input ---------- */
 const keys = {};
 const joy = { active: false, id: null, ox: 0, oy: 0, x: 0, y: 0 };
+// Typing the code below after dying brings a solo run back to life
+const REVIVE_CODE = 'zxopzxop123';
+let codeBuf = '';
+function tryRevive() {
+  if (!G || !G.over || G.won || G.local || G.coop || G.remote || state === 'menu') return;
+  if (G.earnedGold) { save.gold -= G.earnedGold; G.earnedGold = 0; persist(); }   // the run is not over after all
+  G.over = false; G.deathT = 0; G.slowT = 0;
+  P = ME; ME.down = false; ME.hp = ME.maxHp; ME.inv = 3;
+  for (const e of G.enemies) {
+    if (e.dead || e.prop) continue;
+    const dx = e.x - ME.x, dy = e.y - ME.y;
+    if (Math.hypot(dx, dy) < 170) { if (e.boss) hitEnemy(e, 500, null, dx, dy, 0); else hitEnemy(e, 99999, null, dx, dy, 0); }
+  }
+  G.fx.push({ k: 'shock', x: ME.x, y: ME.y, t: 0, dur: 0.6, r: 170 });
+  G.whiteFlash = 1; G.shake = 8;
+  setState('play');
+  Snd.music(G.boss ? 2 : 1);
+  banner('Second Dawn', 'You rise again', '#ffd35a');
+  Snd.play('evolve');
+}
 addEventListener('keydown', e => {
+  if (e.key && e.key.length === 1) { codeBuf = (codeBuf + e.key.toLowerCase()).slice(-REVIVE_CODE.length); if (codeBuf === REVIVE_CODE) { codeBuf = ''; tryRevive(); } }
   keys[e.code] = true;
   Snd.init(); applyVolume();
   onKey(e);
@@ -2326,6 +2347,7 @@ function setWho(id, pl, what) {
 let luSel = 0;
 // Every level gives every standing player an upgrade of their own. They choose one after another while the rest wait.
 function openLevelUp() {
+  if (Mods.first('levelUp')) return;   // split-screen co-op shows every player's choices at once (see local.js)
   if (!G.lvQueue || !G.lvQueue.length) G.lvQueue = G.local ? G.players.filter(p => !p.down) : [ME];
   if (!G.lvQueue.length) G.lvQueue = [ME];
   G.chooser = G.lvQueue.shift();
@@ -2477,6 +2499,7 @@ function gameOver(won) {
   const timeBonus = Math.floor(G.t / 60) * 10, killBonus = Math.floor(G.kills / 25);
   const earned = G.gold + Math.round((timeBonus + killBonus + (won ? 300 : 0)) * P.greed);
   save.gold += earned;
+  G.earnedGold = earned;
   save.best = Math.max(save.best || 0, Math.min(G.t, RUN_LENGTH));
   persist();
   setState('over');

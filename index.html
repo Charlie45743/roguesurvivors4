@@ -237,6 +237,22 @@ input[type=range] { accent-color: var(--ember); width: 140px; }
 #dpad { position: fixed; right: 16px; bottom: 24px; display: flex; gap: 10px; z-index: 8; }
 #dpad .btn { padding: 16px 14px; font-size: 14px; touch-action: none; }
 #dpad.roll-only .btn:not([data-act="roll"]) { display: none; }
+/* Split-screen level-up: one pane per player, over their own half of the screen */
+#luSplit { position: fixed; inset: 0; }
+#levelup.split > :not(#luSplit) { display: none; }
+.lpane { position: absolute; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 12px; box-shadow: inset 0 0 0 2px var(--line); }
+.lpane.done { background: rgba(11,10,18,.55); }
+.lhead { font-family: var(--head); font-size: clamp(20px, 2.6vw, 32px); color: var(--gold); letter-spacing: 2px; text-shadow: 0 3px 0 var(--ember), 0 6px 0 var(--void); }
+.lwho { font-family: var(--head); font-size: 15px; text-shadow: 0 2px 0 var(--void); }
+.lcards { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; max-width: 100%; }
+.lcards .card { width: clamp(140px, 24%, 190px); padding: 10px; gap: 6px; }
+.lcards .card .desc { font-size: 14px; line-height: 1.25; }
+.lcards .card .name { font-size: 13px; }
+.lpicked { font-family: var(--head); font-size: 17px; color: var(--green); display: flex; align-items: center; gap: 8px; }
+.lpicked img { width: 20px; }
+.lbtns { display: flex; gap: 10px; }
+.lbtns .btn { font-size: 11px; padding: 7px 12px; }
+.lfoot { font-size: 14px; color: var(--dim); text-align: center; }
 .who { font-size: 15px; letter-spacing: 1px; text-align: center; min-height: 1.2em; margin: 4px 0 8px; text-shadow: 0 2px 0 #0b0a12; }
 #fade { position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none; z-index: 50; transition: opacity .3s; }
 #fade.on { opacity: 1; }
@@ -417,6 +433,7 @@ button.pane.open:hover { opacity: 1; background: var(--panel2); }
   <div id="luWho" class="who"></div>
   <div id="luCards" class="cards lu"></div>
   <div class="lu-actions"><button class="btn ghost" id="btnReroll">Reroll</button><button class="btn ghost" id="btnSkip">Skip</button></div>
+  <div id="luSplit"></div>
 </section>
 
 <section id="chest" class="screen hidden dim">
@@ -506,29 +523,29 @@ button.pane.open:hover { opacity: 1; background: var(--panel2); }
 window.__errs = [];
 window.addEventListener('error', e => { window.__errs.push(e.message + ':' + e.lineno); document.getElementById('err').textContent += (e.message + ' @' + (e.filename || '').split('/').pop() + ':' + e.lineno + '\n'); });
 </script>
-<script src="js/sprites.js"></script>
-<script src="js/audio.js"></script>
-<script src="js/data.js"></script>
-<script src="js/game.js?v=3"></script>
-<script src="js/art.js"></script>
-<script src="js/dungeon.js"></script>
-<script src="js/dungeon2.js"></script>
-<script src="js/bosses.js"></script>
-<script src="js/bossfx.js"></script>
-<script src="js/bossart.js"></script>
-<script src="js/structures.js"></script>
-<script src="js/powerups.js"></script>
-<script src="js/towns.js"></script>
-<script src="js/dims.js"></script>
-<script src="js/story.js?v=2"></script>
-<script src="js/allies.js"></script>
-<script src="js/sites.js"></script>
-<script src="js/dungeon3.js"></script>
-<script src="js/world.js"></script>
+<script src="js/sprites.js?v=4"></script>
+<script src="js/audio.js?v=4"></script>
+<script src="js/data.js?v=4"></script>
+<script src="js/game.js?v=4"></script>
+<script src="js/art.js?v=4"></script>
+<script src="js/dungeon.js?v=4"></script>
+<script src="js/dungeon2.js?v=4"></script>
+<script src="js/bosses.js?v=4"></script>
+<script src="js/bossfx.js?v=4"></script>
+<script src="js/bossart.js?v=4"></script>
+<script src="js/structures.js?v=4"></script>
+<script src="js/powerups.js?v=4"></script>
+<script src="js/towns.js?v=4"></script>
+<script src="js/dims.js?v=4"></script>
+<script src="js/story.js?v=4"></script>
+<script src="js/allies.js?v=4"></script>
+<script src="js/sites.js?v=4"></script>
+<script src="js/dungeon3.js?v=4"></script>
+<script src="js/world.js?v=4"></script>
 <script src="https://cdn.jsdelivr.net/npm/nostr-tools@2.7.2/lib/nostr.bundle.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/5.3.4/mqtt.min.js"></script>
-<script src="js/net.js?v=2"></script>
-<script src="js/local.js?v=2"></script>
-<script src="js/devhooks.js"></script>
+<script src="js/net.js?v=4"></script>
+<script src="js/local.js?v=4"></script>
+<script src="js/devhooks.js?v=4"></script>
 </body>
 </html>
