@@ -250,15 +250,20 @@ input[type=range] { accent-color: var(--ember); width: 140px; }
 .board .empty { text-align: center; color: var(--dim); font-size: 18px; padding: 20px; }
 .setvol { display: flex; flex-direction: column; gap: 14px; font-size: 20px; }
 /* Local co-op lobby: the whole screen splits into one pane per player as they join, like the run itself */
-#localco { padding: 8px; gap: 8px; justify-content: flex-start; }
-#localco h2 { font-size: 24px; } #localco .sub { margin: 0; font-size: 15px; }
-#localco .seats { display: grid; flex: 1; min-height: 0; width: 100%; background: var(--void); box-shadow: none; gap: 4px; grid-template-columns: 1fr; }
+#localco { padding: 0; gap: 0; justify-content: flex-start; }
+#localco h2, #localco .sub { display: none; position: fixed; top: 6px; left: 0; right: 0; margin: 0; z-index: 2; pointer-events: none; font-size: 20px; text-shadow: 0 2px 0 var(--void); }
+#localco .sub { top: 34px; font-size: 14px; }
+#localco > .row { position: fixed; bottom: 8px; left: 0; right: 0; z-index: 2; gap: 10px; }
+#localco > .row .btn { font-size: 12px; padding: 8px 14px; }
+#localco .seats { position: fixed; inset: 0; display: grid; width: auto; min-height: 0; background: transparent; box-shadow: none; gap: 3px; grid-template-columns: 1fr; }
 #localco .seats[data-n="2"], #localco .seats[data-n="3"], #localco .seats[data-n="4"] { grid-template-columns: 1fr 1fr; }
 #localco .seats[data-n="3"], #localco .seats[data-n="4"] { grid-template-rows: 1fr 1fr; }
-#localco .pane { min-width: 0; min-height: 0; overflow-y: auto; border: 0; background: var(--panel); box-shadow: inset 0 0 0 2px var(--pc); }
+#localco .pane { min-width: 0; min-height: 0; overflow-y: auto; border: 0; padding: 60px 14px 52px; justify-content: center; background: rgba(11,10,18,.62); backdrop-filter: blur(2px); box-shadow: inset 0 0 0 2px var(--pc); }
+#localco .pane.ready { background: rgba(40,70,20,.55); }
 #localco .pane.open { box-shadow: inset 0 0 0 2px var(--line); }
 #localco .seats[data-n="3"] .pane .pstart, #localco .seats[data-n="4"] .pane .pstart, #localco .seats[data-n="3"] .pane .pdesc, #localco .seats[data-n="4"] .pane .pdesc, #localco .seats[data-n="3"] .pane .pnav, #localco .seats[data-n="4"] .pane .pnav { display: none; }
 #localco .seats[data-n="3"] .portrait, #localco .seats[data-n="4"] .portrait { width: 56px; height: 44px; }
+#localco .seats[data-n="3"] .pane, #localco .seats[data-n="4"] .pane { padding: 14px 10px 46px; gap: 4px; }
 
 @media (max-width: 640px) { .reel { width: 76px; height: 76px; } .reel img { width: 44px; height: 44px; } }
 
