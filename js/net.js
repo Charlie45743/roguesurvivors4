@@ -39,7 +39,13 @@ function renderLobbyChars() {
    (e.g. 'wss://your-app.onrender.com/ws') or open the page with ?server=wss://host/ws. */
 const COOP_SERVER = '';
 const BROKERS = ['wss://broker.hivemq.com:8884/mqtt', 'wss://broker.emqx.io:8084/mqtt'];
-const coopUrl = () => new URLSearchParams(location.search).get('server') || COOP_SERVER;
+/* Preferred: the relay in serve.js on the same host (/ws), which is reliable and needs no third-party broker.
+   Hosts that do not run serve.js (such as static pages) fail to open it and fall back to the public transports below. */
+const coopUrl = () => new URLSearchParams(location.search).get('server') || COOP_SERVER || sameHostRelay();
+function sameHostRelay() {
+  if (!/^https?:$/.test(location.protocol)) return '';
+  return (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws';
+}
 
 /* A WebSocket look-alike speaking the same protocol as serve.js (create / join / relay), carried over MQTT topics:
      <room>/room      retained "live" marker the host owns; cleared when the host leaves or drops (via the MQTT will)
@@ -303,12 +309,23 @@ function connect(then) {
   if (Net.ws && Net.ws.readyState <= 1) { then(); return; }
   const url = coopUrl();
   if (!url && typeof NostrTools === 'undefined' && typeof mqtt === 'undefined') { lobbyStatus('Could not load the co-op library. Check your connection and reload.'); return; }
-  lobbyStatus(url ? 'Connecting to the co-op server (a sleeping free host can take up to a minute)...' : 'Connecting...');
-  const ws = url ? new WebSocket(url) : typeof NostrTools !== 'undefined' ? hybridSocket() : mqttSocket();
+  lobbyStatus(url ? 'Connecting to the co-op server...' : 'Connecting...');
+  const publicSocket = () => typeof NostrTools !== 'undefined' ? hybridSocket() : mqttSocket();
+  if (url) useSocket(new WebSocket(url), then, () => useSocket(publicSocket(), then, null));
+  else useSocket(publicSocket(), then, null);
+}
+/* Wire a socket into the lobby. `fallback` runs if the socket fails before it opens; it is only set for the same-host relay. */
+function useSocket(ws, then, fallback) {
+  let open = false;
   Net.ws = ws;
-  ws.onopen = then;
-  ws.onerror = () => lobbyStatus('Could not reach the co-op server.');
+  ws.onopen = () => { open = true; then(); };
+  ws.onerror = () => {
+    if (open || Net.ws !== ws) return;
+    if (fallback) { ws.onerror = ws.onclose = null; try { ws.close(); } catch (e) { /* not open */ } Net.ws = null; lobbyStatus('Connecting...'); fallback(); return; }
+    lobbyStatus('Could not reach the co-op server.');
+  };
   ws.onclose = () => {
+    if (Net.ws !== ws) return;
     const wasPlaying = Net.peer && G && G.coop;
     Object.assign(Net, { ws: null, peer: false, code: null, role: null });
     if (wasPlaying) { banner('Connection lost', 'Your partner is gone', '#d8354a'); if (G.remote) setTimeout(openMenu, 1500); }
@@ -316,7 +333,8 @@ function connect(then) {
   };
   ws.onmessage = ev => onNet(JSON.parse(ev.data));
 }
-$('btnCoop').onclick = () => { Snd.play('select'); openLobby(); };
+$('btnCoop').onclick = () => { Snd.play('select'); openCoopMenu(); };
+$('btnOnline').onclick = () => { Snd.play('select'); openLobby(); };
 $('btnCreate').onclick = () => { Snd.play('select'); connect(() => Net.ws.send(JSON.stringify({ t: 'create' }))); };
 $('btnJoin').onclick = () => {
   const code = $('roomCode').value.trim().toUpperCase();

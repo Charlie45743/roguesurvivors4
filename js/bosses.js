@@ -120,12 +120,13 @@ function drawStyledBullet(b) {
 const sched = (b, delay, fn) => b.queue.push({ at: b.clock + delay, fn });
 function makeBoss(id, x, y, o = {}) {
   const def = BOSS_DEFS[id];
-  const mul = o.hpMul || 1;
+  // Bosses that spawn naturally in the world (minor) hit softer and have less health than the story and timed ones
+  const mul = (o.hpMul || 1) * (o.minor ? 0.6 : 1), dm = (o.dmgMul || 1) * (o.minor ? 0.75 : 1);
   const e = {
     id: uid++, type: id, boss: true, def, name: def.name, x, y, r: def.r || 16, hp: def.hp * mul, maxHp: def.hp * mul,
-    spd: def.spd || 40, dmg: (def.dmg || 28) * (o.dmgMul || 1), xp: 0, kx: 0, ky: 0, flash: 0, slow: 0, freeze: 0, anim: 0, cd: {},
+    spd: def.spd || 40, dmg: (def.dmg || 28) * dm, xp: 0, kx: 0, ky: 0, flash: 0, slow: 0, freeze: 0, anim: 0, cd: {},
     frames: def.frames ? def.frames() : SPR.colossus, scale: def.scale || 2, d: { color: def.color, kb: 0.03, anim: 0.35 },
-    dead: false, dir: 1, hh: 12, clock: 0, queue: [], nextAt: 1.6, lock: 0, phase: 0, air: 0, mul: o.dmgMul || 1,
+    dead: false, dir: 1, hh: 12, clock: 0, queue: [], nextAt: 1.6, lock: 0, phase: 0, air: 0, mul: dm,
     ai: bossBrain, drawFn: def.draw || drawSpriteBoss, onDeath: o.onDeath, minor: o.minor,
   };
   e.hh = e.frames[0].h / 2;
@@ -594,7 +595,7 @@ const BOSS_DEFS = {
     ],
   },
   gravekeeper: {
-    name: 'The Gravekeeper', hp: 2600, spd: 36, r: 14, color: '#a6e05a', scale: 2, frames: () => SPR.gravekeeper, phases: [0.5],
+    name: 'The Gravekeeper', hp: 1800, spd: 36, r: 14, color: '#a6e05a', scale: 2, frames: () => SPR.gravekeeper, phases: [0.5],
     attacks: [
       { id: 'dig', w: 2, dur: 2.2, run: (b, t) => { A.slams(b, t, 4, 22, 0.3, { color: '#a6e05a' }); sched(b, 1.4, bb => A.summon(bb, ['skel'], 4, 40)); } },
       { id: 'swing', dur: 1.6, run: (b, t) => A.cone(b, t, 1.6, 70, 2, { color: '#a6e05a', liveColor: '#f2eee6' }) },

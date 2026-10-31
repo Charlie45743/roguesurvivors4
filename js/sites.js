@@ -292,9 +292,11 @@ const SITES = {
     ground: (x, y, n) => (Math.abs(x) < 98 && Math.abs(y) < 72 && n > 0.12 ? (n > 0.8 ? hx('#3a2f24') : hx('#33291f')) : null),
     act(st) {
       st.guards = around(st, 9, st.R * 0.8, ['bandit', 'archer', 'bandit']);
-      st.chief = makeBoss('chief', st.x, st.y - 24, { minor: true, hpMul: G.hpMul, onDeath: e => { st.chiefDead = true; banner('The slaver chief is dead', 'Free the captives', '#ffd35a'); dropAt('bag', e.x, e.y); dropAt('chest', e.x + 12, e.y); } });
     },
-    inter: st => (st.captives || []).filter(n => !n.dead).map(n => ({ x: n.x, y: n.y, npc: n, label: st.chiefDead ? 'Free the captive' : 'The captive is locked in. Kill the slaver chief', act: pl => { if (st.chiefDead) freeCaptive(st, n, pl); } })),
+    inter: st => (st.captives || []).filter(n => !n.dead).map(n => ({ x: n.x, y: n.y, npc: n, label: st.chiefDead ? 'Free the captive' : st.chief ? 'The slaver chief still guards the captives' : 'Free the captive (wakes the slaver chief)', act: pl => {
+      if (st.chiefDead) freeCaptive(st, n, pl);
+      else if (!st.chief) { st.chief = makeBoss('chief', st.x, st.y - 24, { minor: true, hpMul: G.hpMul, onDeath: e => { st.chiefDead = true; banner('The slaver chief is dead', 'Free the captives', '#ffd35a'); dropAt('bag', e.x, e.y); dropAt('chest', e.x + 12, e.y); } }); banner('The slaver chief wakes', 'He will not let the captives go', '#d8354a'); Snd.play('warn'); }
+    } })),
     amb(st, now, dt) { siteFlame(st.x + 4, st.y + 30, now, dt, 1); },
   },
   mercs: {

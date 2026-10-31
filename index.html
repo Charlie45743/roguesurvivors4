@@ -271,6 +271,9 @@ input[type=range] { accent-color: var(--ember); width: 140px; }
 .code { font-family: var(--head); font-size: 54px; letter-spacing: 12px; color: var(--gold); text-shadow: 0 4px 0 var(--ember), 0 8px 0 var(--void); }
 #roomInfo { color: var(--dim); font-size: 17px; margin: 8px 0 0; }
 .lobby-chars { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; max-width: 760px; }
+.seats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: min(560px, 92vw); margin: 8px auto; }
+.seat { min-height: 72px; justify-content: center; text-align: center; }
+.seat.open { opacity: 0.7; }
 .lchar { background: var(--panel); border: 0; padding: 8px 10px; display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; color: var(--ink); font-family: var(--head); font-size: 11px;
   box-shadow: 0 0 0 3px var(--void), 0 0 0 5px var(--line); }
 .lchar img { width: 50px; height: 40px; object-fit: contain; }
@@ -422,6 +425,23 @@ input[type=range] { accent-color: var(--ember); width: 140px; }
   <div class="row"><button class="btn hidden" id="btnStartCoop">Start the night</button><button class="btn ghost" data-back>Back</button></div>
 </section>
 
+<section id="coopmenu" class="screen hidden">
+  <h2>Co-op</h2>
+  <p class="sub">Play with a friend on another device, or with up to four people on this screen.</p>
+  <div class="menu-btns">
+    <button class="btn big" id="btnOnline">Online</button>
+    <button class="btn big" id="btnLocal">Local (this screen)</button>
+  </div>
+  <div class="row"><button class="btn ghost" data-back>Back</button></div>
+</section>
+
+<section id="localco" class="screen hidden">
+  <h2>Local co-op</h2>
+  <p class="sub" id="localStatus">Tap a seat, press E for WASD or / for the arrow keys, or press A on a controller.</p>
+  <div id="seats" class="seats"></div>
+  <div class="row"><button class="btn hidden" id="btnLocalStart">Start the night</button><button class="btn ghost" id="btnLocalBack">Back</button></div>
+</section>
+
 <section id="wait" class="screen hidden">
   <p id="waitText" class="waittext">Waiting for your partner...</p>
 </section>
@@ -467,6 +487,7 @@ window.addEventListener('error', e => { window.__errs.push(e.message + ':' + e.l
 <script src="https://cdn.jsdelivr.net/npm/nostr-tools@2.7.2/lib/nostr.bundle.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/5.3.4/mqtt.min.js"></script>
 <script src="js/net.js"></script>
+<script src="js/local.js"></script>
 <script src="js/devhooks.js"></script>
 </body>
 </html>

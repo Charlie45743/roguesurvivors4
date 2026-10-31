@@ -8,7 +8,7 @@ SCREENS.push('modal');
 HUD_STATES.add('modal');
 function openModal(def, actor) {
   actor = actor || P || ME;
-  if (actor && actor !== ME) { Mods.call('remoteModal', actor, def); return; }
+  if (actor && actor !== ME && !G.local) { Mods.call('remoteModal', actor, def); return; }
   if (state !== 'modal') MODAL_FROM = state;
   MODAL = def; MODAL_ACTOR = ME;
   setState('modal');
@@ -192,7 +192,6 @@ function activateStruct(st) {
       break;
     case 'bandits':
       around(7, st.R, ['bandit', 'archer']);
-      st.chief = makeBoss('chief', st.x - 10, st.y - 10, { minor: true, hpMul: G.hpMul, onDeath: e => { st.chiefDead = true; banner('The chief is dead', 'Free the prisoner', '#ffd35a'); dropAt('bag', e.x, e.y); } });
       break;
     case 'watchtower':
       st.archers = [];
@@ -227,9 +226,10 @@ function graveBroken(e) {
   st.broken = (st.broken || 0) + 1;
   burst(e.x, e.y - 3, '#5e557f', 12, 60);
   Snd.play('glass');
-  if (e.cracked && Math.random() < 0.55) dropAt(pick(['coin', 'bag', 'heart', 'coin']), e.x, e.y);
+  dropAt('coin', e.x, e.y);
+  if (e.cracked && Math.random() < 0.55) dropAt(pick(['bag', 'heart', 'coin']), e.x, e.y);
   if (Math.random() < 0.08) dropFragment(e.x, e.y);
-  if (!st.keeper && st.broken >= 6 && Math.random() < 0.5) {
+  if (!st.keeper && !st.cleansed && st.broken >= 6) {
     st.keeper = makeBoss('gravekeeper', e.x, e.y - 20, { minor: true, hpMul: G.hpMul, onDeath: k => { st.cleansed = true; dropAt('chest', k.x, k.y, { boss: true }); dropFragment(k.x + 12, k.y); banner('The graveyard falls silent', '', '#a6e05a'); } });
     banner('The Gravekeeper awakens', 'You disturbed too many graves', '#a6e05a');
     Snd.play('warn');
@@ -244,7 +244,7 @@ function interactablesOf(st) {
   for (const n of st.npcs) {
     if (n.dead) continue;
     if (n.kind === 'prisoner') {
-      if (st.type === 'bandits' && !st.freed) list.push({ x: n.x, y: n.y, npc: n, label: st.chiefDead ? 'Free the prisoner' : 'The prisoner is locked in. Kill the chief', act: pl => st.chiefDead && freePrisoner(st, pl) });
+      if (st.type === 'bandits' && !st.freed) list.push({ x: n.x, y: n.y, npc: n, label: st.chiefDead ? 'Free the prisoner' : st.chief ? 'The chief still guards the prisoner' : 'Free the prisoner (wakes the chief)', act: pl => { if (st.chiefDead) freePrisoner(st, pl); else if (!st.chief) wakeChief(st, n.x, n.y); } });
       else if (st.type === 'ruinvillage' && !st.helped) list.push({ x: n.x, y: n.y, npc: n, label: 'Help the survivor', act: pl => helpSurvivor(st, pl) });
     } else if (!st.ruined) list.push({ x: n.x, y: n.y, npc: n, label: 'Talk to the ' + NPC_NAMES[n.kind], act: pl => openShop(n.kind, st, pl) });
   }
@@ -280,6 +280,7 @@ function worldInteract(pl) {
   return true;
 }
 function goDungeon(pl, theme, st) {
+  if (G.local) { banner('Interiors are solo for now', 'Local co-op stays on the night map', '#a59cc4'); return; }
   if (pl !== ME) { Mods.call('remoteCrypt', pl, theme, st); return; }
   enterCrypt(null, theme, st);
 }
@@ -416,6 +417,12 @@ function helpSurvivor(st, pl) {
   G.gold += gold;
   openModal({ title: 'A survivor', color: '#ffd35a', sub: `+${gold} gold`, body: '<p class="flavor">"They came at dusk and never left. Take this. Get out of here before they come back."</p>', buttons: [{ label: 'Continue', primary: true }] }, pl);
   st.npcs[0].dead = true;
+}
+/* The chief sleeps by the prison until someone tries to free the prisoner */
+function wakeChief(st, x, y) {
+  st.chief = makeBoss('chief', x - 10, y - 10, { minor: true, hpMul: G.hpMul, onDeath: e => { st.chiefDead = true; banner('The chief is dead', 'Free the prisoner', '#ffd35a'); dropAt('bag', e.x, e.y); } });
+  banner('The chief wakes', 'He will not let the prisoner go', '#d8354a');
+  Snd.play('warn');
 }
 function freePrisoner(st, pl) {
   st.freed = true;

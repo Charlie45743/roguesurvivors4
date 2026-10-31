@@ -219,8 +219,8 @@ addEventListener('keydown', e => {
   onKey(e);
 });
 addEventListener('keyup', e => { keys[e.code] = false; });
-// In co-op, losing focus must not pause: the host's pause would freeze the partner too
-const inCoop = () => !!(G && (G.coop || G.remote));
+// In co-op (online or on this screen), losing focus must not pause: it would freeze the partners too
+const inCoop = () => !!(G && (G.coop || G.remote || G.local));
 addEventListener('blur', () => { for (const k in keys) keys[k] = false; if ((state === 'play' || state === 'dungeon') && !inCoop()) openPause(); });
 document.addEventListener('visibilitychange', () => { if (document.hidden && (state === 'play' || state === 'dungeon') && !inCoop()) openPause(); });
 addEventListener('pointerdown', () => { Snd.init(); applyVolume(); });
@@ -290,7 +290,7 @@ function newRun(cid, opts = {}) {
     rerolls: 2 + (save.shop.reroll || 0), revivals: save.shop.revival || 0, choices: [], chest: null,
     buffs: {}, totems: [], shrines: [], shrineT: 35, shrineCost: 25, cursePending: 0, shrine: null, nearShrine: null,
     crypts: [], cryptT: 95, nearCrypt: null, pausedFrom: null,
-    seed: opts.seed ?? (Math.random() * 1e9 | 0), dim: null, players: [], coop: opts.coop || null, story: opts.story || null,
+    seed: opts.seed ?? (Math.random() * 1e9 | 0), dim: null, players: [], coop: opts.coop || null, story: opts.story || null, local: !!opts.local,
   };
   // Builds live on each player; these keep the single-player code paths reading "the acting player's" build
   Object.defineProperties(G, {
@@ -306,6 +306,18 @@ function newRun(cid, opts = {}) {
     G.players.push(P);
     addWeapon(P.ch.weapon);
     P.hp = P.maxHp;
+    P = ME;
+  }
+  // Local co-op: every seat plays in this run, each driven by its own device (see local.js)
+  if (opts.local) {
+    ME.dev = opts.local[0];
+    opts.local.slice(1).forEach((dev, i) => {
+      P = makePlayer(dev.ch, 18 * (i + 1), 0);
+      P.dev = dev;
+      G.players.push(P);
+      addWeapon(P.ch.weapon);
+      P.hp = P.maxHp;
+    });
     P = ME;
   }
   for (let i = 0; i < 5; i++) {
@@ -892,7 +904,7 @@ function update(rdt) {
 function updatePlayer(dt) {
   P.hurtT = Math.max(0, P.hurtT - dt);
   if (P.down) { P.moving = false; return; }
-  const [ix, iy] = P === ME ? inputVec() : (P.input || [0, 0]);
+  const [ix, iy] = P.dev ? devVec(P.dev) : P === ME ? inputVec() : (P.input || [0, 0]);
   P.moving = !!(ix || iy);
   if (P.moving) {
     const spd = P.speed * (P.wet ? 0.6 : 1) * (G.buffs.haste > 0 ? 1.4 : 1);
@@ -1471,7 +1483,7 @@ function spawnCrypt() {
   Snd.play('warn');
 }
 function updateCrypts(dt) {
-  if (!G.won && !G.boss) {
+  if (!G.won && !G.boss && !G.local) {
     G.cryptT -= dt;
     if (G.cryptT <= 0) { G.cryptT = rand(150, 200); if (!G.crypts.length) spawnCrypt(); }
   }
@@ -1627,10 +1639,17 @@ function drawCrypt(c, now) {
   if (G.nearCrypt === c && Math.floor(now * 3) % 2) drawText(ctx, 'E', c.x - camX, c.y - camY - 24, '#ffd35a');
 }
 
+const PLAYER_COLORS = ['#ffd35a', '#8ff0ff', '#e27bf0', '#a6e05a'];
 function render() {
   if (G) P = ME;
   if (G && D && (state === 'dungeon' || (state === 'pause' && G.pausedFrom === 'dungeon'))) { renderCrypt(); return; }
   if (!G || state === 'menu' || state === 'chars' || state === 'altar') { renderMenuBg(); return; }
+  if (G.local && G.players.length > 1) { renderSplit(drawScene); return; }
+  drawScene();
+}
+// One view of the night, centred on P. Split-screen calls this once per player (see local.js).
+function drawScene() {
+  const view = P;
   lights = []; glows = [];
   const pointers = [];
   const sh = G.shake;
@@ -1704,7 +1723,7 @@ function render() {
   Mods.call('ents', ents);
   ents.sort((a, b) => sortY(a) - sortY(b));
   for (const e of ents) {
-    if (e.isPlayer) { P = e; drawPlayer(now); P = ME; }
+    if (e.isPlayer) { P = e; drawPlayer(now); P = view; }
     else if (e.draw) e.draw(now);
     else if (e.isDecor) drawDecor(e);
     else if (e.isCrypt) drawCrypt(e, now);
@@ -1758,7 +1777,7 @@ function render() {
     light(P.x, P.y, 40, 0.6);
   }
   }
-  P = ME;
+  P = view;
 
   // Projectiles
   for (const p of G.projs) {
@@ -1839,7 +1858,7 @@ function render() {
     lx.drawImage(LIGHT, Math.round(L.x - camX - L.r), Math.round(L.y - camY - L.r), L.r * 2, L.r * 2);
   }
   lx.globalAlpha = 1;
-  ctx.drawImage(lc, 0, 0);
+  ctx.drawImage(lc, 0, 0, W, H, 0, 0, W, H);
   ctx.globalCompositeOperation = 'lighter';
   for (const g of glows) {
     ctx.globalAlpha = g.a;
@@ -1875,7 +1894,8 @@ function render() {
     }
     ctx.fillStyle = '#7a1a2a'; ctx.fillRect(bx, by, 18, 2);
     ctx.fillStyle = pl === ME ? '#d8354a' : '#3f8ee0'; ctx.fillRect(bx, by, Math.round(18 * clamp(pl.hp / pl.maxHp, 0, 1)), 2);
-    if (G.players.length > 1) drawText(ctx, pl === ME ? 'P1' : 'P2', pl.x - camX, pl.y - camY - 15, pl === ME ? '#ffd35a' : '#8ff0ff');
+    if (G.players.length > 1) drawText(ctx, 'P' + (G.players.indexOf(pl) + 1), pl.x - camX, pl.y - camY - 15, PLAYER_COLORS[G.players.indexOf(pl)] || '#fff');
+    if (G.local && !pl.down) { const it = nearInteract(pl); if (it) drawText(ctx, pl.dev ? pl.dev.hint : 'A', pl.x - camX, pl.y - camY - 24, '#ffd35a'); }
   }
 
   // Boss telegraph
@@ -2394,7 +2414,7 @@ function gameOver(won) {
   lastChar = G.ch.id;
 }
 let lastChar = 'wren';
-$('btnAgain').onclick = () => { Snd.play('select'); newRun(lastChar); };
+$('btnAgain').onclick = () => { Snd.play('select'); if (G && G.local) startLocal(); else newRun(lastChar); };
 $('btnMenu').onclick = () => { Snd.play('select'); openMenu(); };
 
 /* ---------- Menu, characters, altar ---------- */
@@ -2498,6 +2518,7 @@ function frame(now) {
   menuT += dt;
   frames++;
   const t0 = performance.now();
+  Mods.call('input');   // device presses (controllers) are read before the frame advances
   if (state === 'play' && G) update(dt);
   else if (state === 'dungeon' && D) updateCrypt(dt);
   else Mods.call('frame', state, dt);

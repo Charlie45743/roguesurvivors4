@@ -105,7 +105,7 @@ const STORY = [
           st.stage = 1;
           say([['morrow', 'There. He hears it.'], ['lamplighter', 'Careful. Your lantern is not the only light in this yard.'], ['morrow', '...Your lantern burns brighter every time we take a shard, old man. Why is that?']], () => {
             const [x, y] = edgePos(20);
-            makeBoss('gravekeeper', x, y, { hpMul: 1.4, onDeath: () => chapterDone([
+            makeBoss('gravekeeper', x, y, { hpMul: 1, onDeath: () => chapterDone([
               ['morrow', 'Rest now. I will finish the digging.'],
               ['lamplighter', 'The second shard. Into the lantern with it.'],
               ['morrow', 'It is warm in there, is it not? Warmer than it should be.'],
