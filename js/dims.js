@@ -245,7 +245,7 @@ Mods.add({
     return true;
   },
   promptLabel() {
-    if (nearSpawner(ME)) return 'E · Open the boss portal';
+    if (nearSpawner(ME)) return 'E · Awaken the boss';
     const p = nearPortal(ME);
     return p ? (p.dim === 'home' ? 'E · Return to the night' : 'E · ' + DIMS[p.dim].name) : '';
   },
@@ -278,6 +278,17 @@ Mods.add({
       ctx.globalAlpha = 1;
     }
   },
+  hud() {
+    let txt = '', warn = false;
+    const left = levelLeft();
+    if (!G.story && left !== null) {
+      if (G.dimPhase === 'done') txt = G.advanceT > 0 && G.nextDim ? 'NEXT LEVEL OPENING' : '';
+      else if (left <= 0) { txt = 'COLLAPSING - KILL THE BOSS NOW'; warn = true; }
+      else if (G.dimPhase === 'boss') txt = 'KILL THE BOSS BEFORE TIME RUNS OUT';
+      else txt = 'FIND THE BOSS PORTAL';
+    }
+    if (hudLast.obj !== txt + warn) { hudLast.obj = txt + warn; const el = $('levelnote'); el.textContent = txt; el.classList.toggle('warn', warn); }
+  },
   drawOverlay(now) {
     if (G.dim === 'frozen') {
       ctx.fillStyle = 'rgba(200,230,255,0.08)'; ctx.fillRect(0, 0, W, H);
@@ -288,17 +299,9 @@ Mods.add({
       ctx.fillStyle = '#e8742c';
       for (let i = 0; i < 30; i++) { const x = (i * 71) % W, y = H - ((now * 25 + i * 37) % H); ctx.fillRect(Math.round(x + Math.sin(now + i) * 6), Math.round(y), 1, 1); }
     } else if (G.dim === 'void') { ctx.fillStyle = 'rgba(80,20,120,0.1)'; ctx.fillRect(0, 0, W, H); }
-    const lvl = G.dim || (!G.story && (G.spawner || G.dimPhase) ? 'world' : null);
-    if (lvl) {
-      const def = DIMS[lvl], left = levelLeft();
-      let txt = '', sub = '', col = def.color;
-      if (G.story) txt = G.dimPhase === 'survive' && G.dim !== 'island' ? `GUARDIAN IN ${Math.max(0, Math.ceil(45 - G.dimT))}` : G.dimPhase === 'done' ? 'FIND THE GOLDEN PORTAL' : '';
-      else if (G.dimPhase === 'done') { if (G.advanceT > 0 && G.nextDim) txt = `NEXT LEVEL IN ${Math.ceil(G.advanceT)}`; }
-      else if (left !== null && left <= 0) { txt = 'THE LEVEL IS COLLAPSING - KILL THE BOSS'; col = Math.floor(now * 4) % 2 ? '#ff6a7a' : '#ffffff'; }
-      else if (G.dimPhase === 'boss') txt = 'KILL THE BOSS BEFORE TIME RUNS OUT';
-      else { txt = 'FIND THE BOSS PORTAL AND KILL IT WITHIN 8 MINS'; if (G.spawner && !G.spawner.on) sub = `BOSS PORTAL ${Math.round(Math.hypot(G.spawner.x - ME.x, G.spawner.y - ME.y) / 8)} M`; }
-      if (txt) drawText(ctx, txt, W / 2, 44, col, 1);
-      if (sub) drawText(ctx, sub, W / 2, 55, '#ffffff', 1);
+    if (G.story && G.dim) {
+      const txt = G.dimPhase === 'survive' && G.dim !== 'island' ? `GUARDIAN IN ${Math.max(0, Math.ceil(45 - G.dimT))}` : G.dimPhase === 'done' ? 'FIND THE GOLDEN PORTAL' : '';
+      if (txt) drawText(ctx, txt, W / 2, 44, DIMS[G.dim].color, 1);
     }
   },
 });
@@ -363,26 +366,37 @@ function worldLevelStep(dt) {
     return;
   }
   const left = LEVEL_TIME - G.t, sp = G.spawner;
-  if (G.dimPhase === 'survive' && sp && !sp.guarded && G.players.some(p => Math.hypot(p.x - sp.x, p.y - sp.y) < 340)) guardSpawner(sp);
   if (left <= 0 && !G.dimEnraged) collapseDimension();
   if (left <= -COLLAPSE_GRACE && !G.over) crushParty();
 }
 function drawSpawner(s, now) {
-  const col = DIMS[s.dim].color, sx = s.x - camX, sy = s.y - camY, live = !s.on;
-  shadow(s.x, s.y + 6, 26);
-  pxDisc(sx, sy + 4, 24, '#0b0a12', 0.5);
-  pxDisc(sx, sy + 4, 21, live ? 'rgba(50,16,28,0.92)' : 'rgba(40,40,40,0.9)', 0.5);
-  ctx.globalAlpha = live ? 0.6 + Math.sin(now * 3) * 0.25 : 0.25;
-  ringOval(sx, sy + 4, 22, col, 0.5, 2); ringOval(sx, sy + 4, 14 + Math.sin(now * 2) * 2, col, 0.5);
-  ctx.globalAlpha = 1;
+  const col = DIMS[s.dim].color, sx = Math.round(s.x - camX), sy = Math.round(s.y - camY), live = !s.on;
+  shadow(s.x, s.y + 6, 24);
+  // stone dais
+  ctx.fillStyle = '#0b0a12'; ctx.fillRect(sx - 15, sy - 2, 31, 10);
+  ctx.fillStyle = '#4a4258'; ctx.fillRect(sx - 14, sy - 1, 29, 8); ctx.fillStyle = '#6b6276'; ctx.fillRect(sx - 14, sy - 1, 29, 2);
+  ctx.fillStyle = '#0b0a12'; ctx.fillRect(sx - 10, sy - 5, 21, 5); ctx.fillStyle = '#5e557f'; ctx.fillRect(sx - 9, sy - 4, 19, 3);
+  // runes on the steps
+  ctx.fillStyle = live ? col : '#36304f';
+  for (const dx of [-11, -5, 5, 11]) ctx.fillRect(sx + dx, sy + 3, 2, 2);
+  // two pillars with braziers
+  for (const dx of [-17, 17]) {
+    ctx.fillStyle = '#0b0a12'; ctx.fillRect(sx + dx - 3, sy - 22, 7, 24);
+    ctx.fillStyle = '#6b6276'; ctx.fillRect(sx + dx - 2, sy - 21, 5, 22); ctx.fillStyle = '#8a87a0'; ctx.fillRect(sx + dx - 2, sy - 21, 2, 22);
+    ctx.fillStyle = '#0b0a12'; ctx.fillRect(sx + dx - 4, sy - 25, 9, 4);
+    if (live) { const f = Math.floor(now * 10 + dx) % 3; ctx.fillStyle = col; ctx.fillRect(sx + dx - 2, sy - 28 - f % 2, 5, 4); ctx.fillStyle = '#ffffff'; ctx.fillRect(sx + dx - 1, sy - 28 - f, 3, 2); light(s.x + dx, s.y - 26, 36, 0.7); glowAt(s.x + dx, s.y - 26, 10, col, 0.45); }
+  }
   if (live) {
-    drawPortal({ dim: s.dim, x: s.x, y: s.y - 4, t: 99 }, now);
-    ctx.globalAlpha = 0.8; ringOval(sx, sy - 22, 17, col, 1.5, 2); ctx.globalAlpha = 1;
-    light(s.x, s.y - 14, 90, 1); glowAt(s.x, s.y - 16, 34, col, 0.6);
-    if (Math.random() < 0.5) addPart(s.x + rand(-12, 12), s.y - 4, 0, rand(-34, -12), 0.9, col);
-    drawText(ctx, 'BOSS PORTAL', sx, sy - 48 + Math.round(Math.sin(now * 3) * 2), '#ffffff');
-    if (nearSpawner(ME) && Math.floor(now * 3) % 2) drawText(ctx, 'E', sx, sy - 60, '#ffd35a');
-  } else light(s.x, s.y, 24, 0.4);
+    // the crystal that calls the boss, floating above the altar
+    const bob = Math.round(Math.sin(now * 2.4) * 3), cy = sy - 22 + bob;
+    ctx.fillStyle = '#0b0a12'; ctx.fillRect(sx - 4, cy - 8, 9, 17); ctx.fillRect(sx - 6, cy - 4, 13, 9);
+    ctx.fillStyle = col; ctx.fillRect(sx - 3, cy - 7, 7, 15); ctx.fillRect(sx - 5, cy - 3, 11, 7);
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(sx - 1, cy - 5, 2, 9); ctx.fillRect(sx - 4, cy - 1, 3, 2);
+    ctx.globalAlpha = 0.5 + Math.sin(now * 3) * 0.2; ringOval(sx, sy + 2, 20 + Math.sin(now * 2) * 2, col, 0.4, 1); ctx.globalAlpha = 1;
+    light(s.x, s.y - 20, 80, 1); glowAt(s.x, s.y - 22 + bob, 24, col, 0.6);
+    if (Math.random() < 0.35) addPart(s.x + rand(-8, 8), s.y - 4, 0, rand(-30, -10), 0.9, col);
+    if (nearSpawner(ME) && Math.floor(now * 3) % 2) drawText(ctx, 'E', sx, sy - 44, '#ffd35a');
+  } else { ctx.fillStyle = '#2a2530'; ctx.fillRect(sx - 3, sy - 9, 7, 5); light(s.x, s.y, 24, 0.4); }
 }
 
 const storyDimDirector = dimDirector;
@@ -397,7 +411,6 @@ dimDirector = function (dt) {
   }
   if (G.dimPhase === 'survive') {
     const sp = G.spawner;
-    if (sp && !sp.guarded && G.players.some(p => Math.hypot(p.x - sp.x, p.y - sp.y) < 340)) guardSpawner(sp);
   } else if (G.dimPhase === 'done' && G.nextDim) {
     G.advanceT -= dt;
     if (G.advanceT <= 0 && state === 'play') { const n = G.nextDim; G.nextDim = null; enterDimension(n); return true; }

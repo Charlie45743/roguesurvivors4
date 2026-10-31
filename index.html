@@ -133,6 +133,11 @@ h2 { font-family: var(--head); font-weight: 700; font-size: clamp(26px, 4.5vw, 4
 #timer { font-family: var(--head); font-size: 30px; color: var(--ink); letter-spacing: 2px; text-align: center;
   text-shadow: 0 3px 0 var(--void), 2px 0 0 var(--void), -2px 0 0 var(--void), 0 -2px 0 var(--void); }
 #timer.boss { color: var(--red); }
+#timerbox { text-align: center; }
+#levelnote { font-family: var(--head); font-size: 8px; letter-spacing: 1px; margin-top: 3px; color: #ffd35a; opacity: .9; white-space: nowrap;
+  text-shadow: 0 1px 0 var(--void), 1px 0 0 var(--void), -1px 0 0 var(--void), 0 -1px 0 var(--void); }
+#levelnote.warn { color: #ff6a7a; }
+#levelnote:empty { display: none; }
 #counters { justify-self: end; text-align: right; font-family: var(--head); font-size: 15px; display: flex; flex-direction: column; gap: 4px;
   text-shadow: 0 2px 0 var(--void), 2px 0 0 var(--void), -2px 0 0 var(--void), 0 -2px 0 var(--void); }
 #counters img { width: 14px; vertical-align: -2px; margin-right: 4px; }
@@ -312,7 +317,7 @@ input[type=range] { accent-color: var(--ember); width: 140px; }
   <div id="xpbar"><div id="xpfill"></div><div id="lvl">LV 1</div></div>
   <div id="hudrow">
     <div><div id="wslots" class="slotrow"></div><div id="pslots" class="slotrow"></div></div>
-    <div id="timer">00:00</div>
+    <div id="timerbox"><div id="timer">00:00</div><div id="levelnote"></div></div>
     <div id="counters"><div><img data-icon="skull" alt=""><span id="kills">0</span></div><div><img data-icon="gold" alt=""><span id="goldc">0</span></div></div>
   </div>
   <div id="bossbar" class="hidden"><div id="bossname"></div><div class="bar"><div id="bossfill"></div></div></div>
