@@ -187,7 +187,7 @@ function blowBarrel(b) {
   D.shake = 6; Snd.play('boom');
   dburst(b.x, b.y - 5, '#e8742c', 30, 160); dburst(b.x, b.y - 5, '#ffd35a', 14, 100);
   for (const e of D.ents) if (!e.dead && Math.hypot(e.x - b.x, e.y - b.y) < 32) cryptHit(e, 60 * P.might, Math.sign(e.x - b.x) || 1, true);
-  if (Math.hypot(DP.x - b.x, DP.y - b.y) < 26) hurtCrypt(12);
+  for (const q of D.bodies) if (!q.out && Math.hypot(q.x - b.x, q.y - b.y) < 26) asBody(q, () => hurtCrypt(12));
   for (const o of D.barrels) if (!o.dead && Math.hypot(o.x - b.x, o.y - b.y) < 30) setTimeout(() => D && !o.dead && blowBarrel(o), 120);
 }
 
@@ -199,7 +199,7 @@ updateCrypt = function (dt) {
   if (!D.last && !D.cleared && D.ents.every(e => e.dead)) { D.cleared = true; banner('Floor cleared', 'The stair upward opens', '#ffd35a'); Snd.play('levelup'); }
   baseUpdateCrypt(dt);
   if (!D || D.dead) return;
-  if (!D.last && D.cleared && D.doorAt && Math.abs(DP.x - D.doorAt.x) < 10 && Math.abs(DP.y - D.doorAt.y) < 16) {
+  if (!D.last && D.cleared && D.doorAt && bodyNear(D.doorAt.x, D.doorAt.y, 10, 16)) {
     const st = D.st, theme = D.theme, floor = D.floor + 1;
     D.dead = true;
     enterCrypt(null, theme, st, floor);
@@ -210,22 +210,28 @@ updateCrypt = function (dt) {
     if (t.t > 0) continue;
     t.t = 2.2;
     const dir = isSolid(t.tx + 1, t.ty) ? -1 : 1;
-    if (Math.abs((t.tx * DT) - DP.x) > 260) continue;
+    if (Math.abs((t.tx * DT) - nearestBody(t.tx * DT, t.ty * DT).x) > 260) continue;
     D.arrows.push({ x: t.tx * DT + DT / 2 + dir * 6, y: t.ty * DT + 4, vx: dir * 190, vy: -20, life: 3, foe: true });
     Snd.play('shoot');
   }
-  for (const c of D.chests) if (!c.open && Math.abs(DP.x - c.x) < 9 && Math.abs(DP.y - c.y) < 12) {
+  // a room chest belongs to whoever opens it, and so does its upgrade
+  for (const c of D.chests) if (!c.open) {
+    const b = bodyNear(c.x, c.y, 9, 12);
+    if (!b) continue;
     c.open = true;
-    const g = Math.round(rand(20, 45) * P.greed);
-    G.gold += g; dtext(c.x, c.y - 14, '+' + g, false, '#ffd35a'); dburst(c.x, c.y - 6, '#ffd35a', 16, 80);
-    if (Math.random() < 0.4) { const b = pick(BASE_BUFFS); G.buffs[b] = Math.max(G.buffs[b] || 0, 20); dtext(c.x, c.y - 22, BUFFS[b].name, false, BUFFS[b].color); }
-    if (Math.random() < 0.3) { applyChoice(rollChoices(1)[0]); dtext(c.x, c.y - 30, 'UPGRADE', false, '#8ff0ff'); }
+    asBody(b, () => {
+      const g = Math.round(rand(20, 45) * P.greed);
+      G.gold += g; dtext(c.x, c.y - 14, '+' + g, false, '#ffd35a'); dburst(c.x, c.y - 6, '#ffd35a', 16, 80);
+      if (Math.random() < 0.4) { const bf = pick(BASE_BUFFS); G.buffs[bf] = Math.max(G.buffs[bf] || 0, 20); dtext(c.x, c.y - 22, BUFFS[bf].name, false, BUFFS[bf].color); }
+      if (Math.random() < 0.3) { applyChoice(rollChoices(1)[0]); dtext(c.x, c.y - 30, 'UPGRADE', false, '#8ff0ff'); }
+    });
     Snd.play('chest');
   }
   for (const e of D.ents) {
     if (e.dead || !e.shooter) continue;
     e.shot = (e.shot ?? rand(1, 2)) - dt;
-    if (e.shot <= 0 && Math.abs(DP.x - e.x) < 200) { e.shot = 2.4; const a = Math.atan2(DP.y - 7 - e.y, DP.x - e.x); D.arrows.push({ x: e.x, y: e.y, vx: Math.cos(a) * 140, vy: Math.sin(a) * 140, life: 3, foe: true, fire: true }); Snd.play('bullet'); }
+    const tg = nearestBody(e.x, e.y);
+    if (e.shot <= 0 && Math.abs(tg.x - e.x) < 200) { e.shot = 2.4; const a = Math.atan2(tg.y - 7 - e.y, tg.x - e.x); D.arrows.push({ x: e.x, y: e.y, vx: Math.cos(a) * 140, vy: Math.sin(a) * 140, life: 3, foe: true, fire: true }); Snd.play('bullet'); }
   }
 };
 

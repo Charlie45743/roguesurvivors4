@@ -236,6 +236,8 @@ input[type=range] { accent-color: var(--ember); width: 140px; }
 .dkeys { font-size: 14px; color: var(--dim); margin-top: 6px; text-shadow: 0 2px 0 var(--void); }
 #dpad { position: fixed; right: 16px; bottom: 24px; display: flex; gap: 10px; z-index: 8; }
 #dpad .btn { padding: 16px 14px; font-size: 14px; touch-action: none; }
+#dpad.roll-only .btn:not([data-act="roll"]) { display: none; }
+.who { font-size: 15px; letter-spacing: 1px; text-align: center; min-height: 1.2em; margin: 4px 0 8px; text-shadow: 0 2px 0 #0b0a12; }
 #fade { position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none; z-index: 50; transition: opacity .3s; }
 #fade.on { opacity: 1; }
 @media (pointer: coarse) { .dkeys { display: none; } }
@@ -373,7 +375,7 @@ button.pane.open:hover { opacity: 1; background: var(--panel2); }
   <button id="pausebtn" class="btn ghost">II</button>
 </div>
 <button id="shrinePrompt" class="btn shrine-prompt hidden">E &middot; Make an offering</button>
-<div id="dhud" class="hidden"><div id="dTitle"></div><div id="dInfo"></div><div class="dkeys">A / D move &middot; Space jump (twice) &middot; J or click attack &middot; Shift roll &middot; S + Space drop through planks</div></div>
+<div id="dhud" class="hidden"><div id="dTitle"></div><div id="dInfo"></div><div class="dkeys">A / D move &middot; Space jump (twice) &middot; J attack &middot; Shift roll &middot; S + Space drop through planks &middot; or hold the mouse to steer and use the buttons</div></div>
 <div id="dpad" class="hidden"><button class="btn ghost" data-act="roll">Roll</button><button class="btn ghost" data-act="jump">Jump</button><button class="btn" data-act="attack">Hit</button></div>
 <div id="fade"></div>
 <div id="titlecard"></div>
@@ -412,6 +414,7 @@ button.pane.open:hover { opacity: 1; background: var(--panel2); }
 
 <section id="levelup" class="screen hidden dim">
   <h2 class="lvh">Level up!</h2>
+  <div id="luWho" class="who"></div>
   <div id="luCards" class="cards lu"></div>
   <div class="lu-actions"><button class="btn ghost" id="btnReroll">Reroll</button><button class="btn ghost" id="btnSkip">Skip</button></div>
 </section>
@@ -419,6 +422,7 @@ button.pane.open:hover { opacity: 1; background: var(--panel2); }
 <section id="chest" class="screen hidden dim">
   <div class="rays"></div>
   <img id="chestImg" alt="Treasure chest">
+  <div id="chestWho" class="who"></div>
   <div id="chestList"></div>
   <button class="btn" id="btnChest">Open</button>
 </section>
@@ -505,12 +509,15 @@ window.addEventListener('error', e => { window.__errs.push(e.message + ':' + e.l
 <script src="js/sprites.js"></script>
 <script src="js/audio.js"></script>
 <script src="js/data.js"></script>
-<script src="js/game.js?v=2"></script>
+<script src="js/game.js?v=3"></script>
 <script src="js/art.js"></script>
 <script src="js/dungeon.js"></script>
 <script src="js/dungeon2.js"></script>
 <script src="js/bosses.js"></script>
+<script src="js/bossfx.js"></script>
+<script src="js/bossart.js"></script>
 <script src="js/structures.js"></script>
+<script src="js/powerups.js"></script>
 <script src="js/towns.js"></script>
 <script src="js/dims.js"></script>
 <script src="js/story.js?v=2"></script>

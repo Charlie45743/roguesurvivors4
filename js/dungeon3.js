@@ -330,9 +330,11 @@ enterCrypt = function (c, theme = 'crypt', st = null, floor = 1, deep = 0) {
   Snd.play('dash');
   setTimeout(() => {
     D = buildCrypt(theme, floor, st, deep);
-    DP = { x: D.start.x, y: D.start.y, vx: 0, vy: 0, w: 8, h: 13, face: 1, onGround: false, coyote: 0, jumpBuf: 0, jumps: 1,
-      roll: 0, rollCd: 0, atkT: 0, atkCd: 0, step: 0, lastAtk: -9, inv: 0, drop: 0, anim: 0, plat: null };
+    D.bodies = cryptCrew().map((pl, i) => makeBody(pl, i));
+    DP = D.bodies[0];
     for (const k in dpress) dpress[k] = false;
+    for (const k in ptrPress) ptrPress[k] = false;
+    curHold = null;
     setState('dungeon');
     if (document.activeElement) document.activeElement.blur();
     $('dTitle').textContent = D.name;
@@ -371,38 +373,41 @@ updateCrypt = function (dt) {
     if (p.kind === 'hmove') p.x = p.x0 + Math.sin(D.t * 0.9 + p.ph) * 36;
     else if (p.kind === 'vmove') p.y = p.y0 - (0.5 + 0.5 * Math.sin(D.t * 0.8 + p.ph)) * 56;
     else if (p.dead) { p.respawn -= dt; p.fy = (p.fy || p.y) + 200 * dt; if (p.respawn <= 0) { p.dead = false; p.stand = 0; p.fy = 0; p.y = p.y0; p.py = p.y0; } }
-    else if (DP.plat === p) {
+    else if (D.bodies.some(b => !b.out && b.plat === p)) {
       p.stand += dt;
       if (p.stand > 0.45) { p.dead = true; p.respawn = 3.5; p.fy = p.y; dburst(p.x, p.y, '#9a6a42', 12, 70); Snd.play('glass'); }
     } else p.stand = Math.max(0, p.stand - dt);
-    if (!p.dead && (p.x !== ox || p.y !== oy)) for (const b of [DP, ...D.ents]) if (b.plat === p && !b.dead) { b.x += p.x - ox; b.y += p.y - oy; }
+    if (!p.dead && (p.x !== ox || p.y !== oy)) for (const b of [...D.bodies, ...D.ents]) if (b.plat === p && !b.dead) { b.x += p.x - ox; b.y += p.y - oy; }
   }
   for (const s of D.saws) {
     s.x = s.x0 + Math.sin(D.t * 1.7 + s.ph) * s.range;
-    if (!D.dead && Math.hypot(DP.x - s.x, DP.y - 6 - s.y) < 8) hurtCrypt(16);
+    if (!D.dead) for (const b of D.bodies) if (!b.out && Math.hypot(b.x - s.x, b.y - 6 - s.y) < 8) asBody(b, () => hurtCrypt(16));
   }
-  for (const f of D.fonts) if (!f.used && Math.abs(DP.x - f.x) < 9 && Math.abs(DP.y - f.y) < 16) {
+  // a healing font mends whoever drinks first
+  for (const f of D.fonts) if (!f.used) {
+    const b = bodyNear(f.x, f.y, 9, 16);
+    if (!b) continue;
     f.used = true;
-    const heal = Math.round(P.maxHp * 0.4);
-    P.hp = Math.min(P.maxHp, P.hp + heal);
+    const heal = Math.round(b.pl.maxHp * 0.4);
+    b.pl.hp = Math.min(b.pl.maxHp, b.pl.hp + heal);
     dtext(f.x, f.y - 18, '+' + heal, false, '#a6e05a'); dburst(f.x, f.y - 8, '#a6e05a', 16, 70); Snd.play('heal');
   }
-  for (const c of D.captives) if (!c.freed && Math.abs(DP.x - c.x) < 11 && Math.abs(DP.y - c.y) < 16) {
+  for (const c of D.captives) if (!c.freed && bodyNear(c.x, c.y, 11, 16)) {
     if (D.ents.some(e => !e.dead && Math.abs(e.x - c.x) < 90 && !e.fly)) { if (Math.random() < dt * 2) dtext(c.x, c.y - 24, 'guards!', false, '#d8354a'); continue; }
     c.freed = true; D.rescued.push(c.type);
     dtext(c.x, c.y - 24, 'FREED', false, '#ffd35a'); dburst(c.x, c.y - 8, '#ffd35a', 18, 80); Snd.play('chest');
   }
-  for (const c of D.chests) if (!c.open && c.mimic && Math.abs(DP.x - c.x) < 9 && Math.abs(DP.y - c.y) < 12) { c.open = true; spawnMimic(c); }
+  for (const c of D.chests) if (!c.open && c.mimic && bodyNear(c.x, c.y, 9, 12)) { c.open = true; spawnMimic(c); }
   dungeonUpdate(dt);
   if (!D || D.dead) return;
   // the way down: after clearing the last floor, the door leads deeper for far greater rewards
-  if (D.last && D.cleared === true && D.doorAt && (D.deep || 0) < MAX_DEEP && Math.abs(DP.x - D.doorAt.x) < 10 && Math.abs(DP.y - D.doorAt.y) < 16) descendCrypt();
+  if (D.last && D.cleared === true && D.doorAt && (D.deep || 0) < MAX_DEEP) { const b = bodyNear(D.doorAt.x, D.doorAt.y, 10, 16); if (b) asBody(b, descendCrypt); }
 };
 function descendCrypt() {
   const deep = D.deep || 0, T = THEMES[D.theme];
   const gold = Math.round(30 * (deep + 1) * P.greed);
   G.gold += gold;
-  P.hp = Math.min(P.maxHp, P.hp + P.maxHp * 0.3);
+  for (const b of D.bodies) if (!b.out) b.pl.hp = Math.min(b.pl.maxHp, b.pl.hp + b.pl.maxHp * 0.3);
   G.cryptCarry = { rescued: D.rescued, ore: D.oreCount || 0 };
   const theme = D.theme, st = D.st;
   D.dead = true;
@@ -502,7 +507,8 @@ finishCrypt = function () {
   const swift = D.t <= CRYPT_PAR * (D.floor || 1), lootMul = 1 + 0.9 * deep;
   const gold = Math.round(((theme === 'crypt' ? 40 : 60) + (swift ? 60 : 0)) * lootMul * P.greed);
   G.gold += gold;
-  if (swift) P.hp = P.maxHp;
+  const crew = D.bodies.map(b => b.pl), fallen = D.bodies.filter(b => b.out).map(b => b.pl), finder = P;
+  if (swift) for (const pl of crew) pl.hp = pl.maxHp;
   const relic = cryptRelic(theme, deep), frag = cryptFrag(theme, deep, D.oreCount || 0), rescued = [...D.rescued];
   const note = { icon: swift ? 'star' : 'gold', name: `${D.name.split(' · ')[0]} ${deep ? `conquered at depth ${deep + 1}` : 'conquered'}`,
     lv: `+${gold} gold${swift ? ', a full heal' : ''}${relic ? ', ' + RELICS[relic].name : ''}${frag ? ', a demon fragment' : ''}${deep ? `, ${deep} bonus chest${deep > 1 ? 's' : ''}` : ''}${rescued.length ? ', ' + rescued.length + ' rescued' : ''}` };
@@ -510,11 +516,14 @@ finishCrypt = function () {
   G.cryptCarry = null;
   Snd.play('chest');
   leaveCrypt(() => {
-    if (relic) dropRelic(relic, ME.x + 14, ME.y);
-    if (frag) dropFragment(ME.x - 14, ME.y);
-    for (let i = 0; i < deep; i++) dropAt('chest', ME.x + 18 * (i + 1), ME.y + 10, { boss: true });
-    for (const t of rescued) recruit(t, ME);
-    openChest(true, note);
+    // the treasure raises anyone who fell below
+    for (const pl of fallen) { pl.down = false; pl.hp = pl.maxHp * (swift ? 1 : 0.5); pl.inv = 2; pl.reviveT = 0; }
+    if (relic) dropRelic(relic, finder.x + 14, finder.y);
+    if (frag) dropFragment(finder.x - 14, finder.y);
+    for (let i = 0; i < deep; i++) dropAt('chest', finder.x + 18 * (i + 1), finder.y + 10, { boss: true });
+    for (const t of rescued) recruit(t, finder);
+    // everyone on this screen gets a chest of their own, one after another
+    openChestsFor(G.local ? G.players : [finder], true, note);
   });
 };
 
@@ -550,31 +559,37 @@ function swingHit(p, sw) {
 }
 const swordUpdateBase = updateCrypt;
 updateCrypt = function (dt) {
-  const p = DP;
-  if (p && !D.dead) {
-    // a press just before the recovery ends is remembered
-    if (dpress.attack && p.atkCd > 0 && p.atkCd < 0.2) p.atkBuf = 0.22;
-    p.atkBuf = (p.atkBuf || 0) - dt;
-    if (p.atkBuf > 0 && p.atkCd <= 0) { dpress.attack = true; p.atkBuf = 0; }
-    const sw = p.sw;
-    if (sw) {
-      if (p.roll > 0) p.sw = null;
-      else {
-        sw.t += dt;
-        if (sw.t >= sw.wind && sw.t <= sw.wind + sw.active) {
-          if (!sw.fired) { sw.fired = true; Snd.play('slash'); if (p.onGround) p.vx += p.face * (sw.big ? 70 : 45); D.shake = Math.max(D.shake, sw.big ? 2 : 0.8); }
-          swingHit(p, sw);
+  if (!D.dead) {
+    if (G.local && typeof refreshCryptInputs === 'function') refreshCryptInputs();
+    eachBody(() => {
+      const p = DP;
+      // a press just before the recovery ends is remembered
+      if (dpress.attack && p.atkCd > 0 && p.atkCd < 0.2) p.atkBuf = 0.22;
+      p.atkBuf = (p.atkBuf || 0) - dt;
+      if (p.atkBuf > 0 && p.atkCd <= 0) { dpress.attack = true; p.atkBuf = 0; }
+      const sw = p.sw;
+      if (sw) {
+        if (p.roll > 0) p.sw = null;
+        else {
+          sw.t += dt;
+          if (sw.t >= sw.wind && sw.t <= sw.wind + sw.active) {
+            if (!sw.fired) { sw.fired = true; Snd.play('slash'); if (p.onGround) p.vx += p.face * (sw.big ? 70 : 45); D.shake = Math.max(D.shake, sw.big ? 2 : 0.8); }
+            swingHit(p, sw);
+          }
+          if (sw.t > sw.total) p.sw = null;
         }
-        if (sw.t > sw.total) p.sw = null;
       }
-    }
+    });
   }
   swordUpdateBase(dt);
 };
 const swordRenderBase = renderCrypt;
 renderCrypt = function () {
   swordRenderBase();
-  if (!D || D.dead || !DP) return;
+  if (!D || D.dead) return;
+  for (const b of D.bodies) if (!b.out) asBody(b, drawSword);
+};
+function drawSword() {
   const p = DP, sw = p.sw, now = performance.now() / 1000;
   const REST = -1.15, hx = p.x + p.face * 3 - camX, hy = p.y - 8 - camY, ease = k => 1 - (1 - k) * (1 - k);
   let a = REST + Math.sin(now * 2) * 0.03, L = 15, trail = null;
@@ -603,4 +618,4 @@ renderCrypt = function () {
   pxLine(gx - cy * 3, gy + cx * 3, gx + cy * 3, gy - cx * 3, '#ffd35a', 1);
   ctx.fillStyle = '#5a3a28'; ctx.fillRect(Math.round(hx - cx) , Math.round(hy - cy), 2, 2);
   if (sw && sw.t >= sw.wind && sw.t < sw.wind + sw.active) { ctx.fillStyle = '#ffffff'; ctx.fillRect(Math.round(tx) - 1, Math.round(ty) - 1, 3, 3); }
-};
+}

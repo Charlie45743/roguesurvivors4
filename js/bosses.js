@@ -4,8 +4,9 @@
 
 /* ---------- Hazards ---------- */
 // k: circle | line | cone | ring | beam. Warns for `warn` seconds, then is live for `life` seconds.
+let activeBoss = null;   // the boss whose script is running right now; hazards it creates remember it
 function hz(o) {
-  const h = { t: 0, warn: 0.8, life: 0.25, dmg: 20, color: '#d8354a', hit: new Set(), ...o };
+  const h = { src: activeBoss, t: 0, warn: 0.8, life: 0.25, dmg: 20, color: '#d8354a', hit: new Set(), ...o };
   G.hazards.push(h);
   return h;
 }
@@ -31,9 +32,11 @@ function updateHazards(dt) {
     if (h.spin) h.ang += h.spin * dt;
     const live = h.t >= h.warn;
     if (h.k === 'ring') h.cur = live ? h.r0 + (h.r - h.r0) * Math.min(1, (h.t - h.warn) / h.life) : h.r0;
-    if (!live) continue;
+    if (!live) { Mods.call('hazardWarn', h, dt); continue; }
+    Mods.call('hazardTick', h, dt);
     if (!h.boomed) {
       h.boomed = true;
+      Mods.call('hazardLive', h);
       if (h.onLive) h.onLive(h);
       if (h.boom) { G.shake = Math.max(G.shake, h.boom); Snd.play('boom'); burst(h.x, h.y, h.color, 10, 90); }
     }
@@ -129,7 +132,8 @@ function makeBoss(id, x, y, o = {}) {
     dead: false, dir: 1, hh: 12, clock: 0, queue: [], nextAt: 1.6, lock: 0, phase: 0, air: 0, mul: dm,
     ai: bossBrain, drawFn: def.draw || drawSpriteBoss, onDeath: o.onDeath, minor: o.minor,
   };
-  e.hh = e.frames[0].h / 2;
+  e.hh = def.hh || e.frames[0].h / 2;
+  if (def.cull) e.cull = def.cull;
   G.enemies.push(e);
   if (!o.minor) {
     G.boss = e;
@@ -143,8 +147,9 @@ function makeBoss(id, x, y, o = {}) {
 }
 function bossBrain(b, dt, tp, dx, dy, d) {
   const def = b.def;
+  activeBoss = b;
   b.clock += dt;
-  b.dir = dx < 0 ? -1 : 1;
+  if (!b.tell) b.dir = dx < 0 ? -1 : 1;   // a boss mid wind-up keeps the facing it started with
   for (let i = 0; i < b.queue.length; i++) {
     if (b.clock >= b.queue[i].at) { const q = b.queue.splice(i--, 1)[0]; q.fn(b, nearestPlayer(b.x, b.y)); }
   }
@@ -162,13 +167,28 @@ function bossBrain(b, dt, tp, dx, dy, d) {
     b.x += dx / d * b.spd * enr * dt; b.y += dy / d * b.spd * enr * dt;
     if (d > Math.max(W, H) * 0.9) { b.x += dx / d * 220 * dt; b.y += dy / d * 220 * dt; }
   }
-  if (!b.queue.length && b.clock >= b.nextAt) {
+  if (b.tell) {
+    // Wind-up: the boss stops, gathers itself and the ground reacts. The attack is released when it finishes.
+    const tl = b.tell;
+    tl.t += dt;
+    lockFor(b, 0.15);
+    BossFx.tell(b, dt);
+    if (tl.t >= tl.dur) {
+      b.tell = null;
+      b.strike = { pose: tl.pose, t: 0, dur: 0.45 };
+      BossFx.strike(b, tl.pose);
+      tl.a.run(b, nearestPlayer(b.x, b.y), enr);
+      b.nextAt = b.clock + (tl.a.dur || 2) / enr + rand(0.4, 0.9);
+    }
+  } else if (!b.queue.length && b.clock >= b.nextAt) {
     const pool = def.attacks.filter(a => (a.phase || 0) <= b.phase && a.id !== b.last);
     const a = pick(pool.flatMap(x => Array(x.w || 1).fill(x)));
     b.last = a.id;
-    a.run(b, tp, enr);
-    b.nextAt = b.clock + (a.dur || 2) / enr + rand(0.4, 0.9);
+    if (a.pose) { b.tell = { pose: a.pose, t: 0, dur: (a.wind || 0.6) / Math.min(enr, 1.4), a }; b.nextAt = Infinity; }
+    else { a.run(b, tp, enr); b.nextAt = b.clock + (a.dur || 2) / enr + rand(0.4, 0.9); }
   }
+  if (b.strike) { b.strike.t += dt; if (b.strike.t >= b.strike.dur) b.strike = null; }
+  activeBoss = null;
 }
 const lockFor = (b, s) => { b.lock = Math.max(b.lock, b.clock + s); };
 
@@ -337,35 +357,6 @@ function drawSpriteBoss(b, now) {
   if (b.def.extraDraw) b.def.extraDraw(b, now);
 }
 
-// The Rotting Mother: a breathing mound of flesh covered in eyes
-function drawMother(b, now) {
-  const z = b.z || 0, sx = b.x - camX, sy = b.y - camY - z;
-  const wob = Math.sin(now * 3) * 2, R = 30 + wob;
-  shadow(b.x, b.y + 18, 60 - z / 3);
-  pxDisc(sx, sy + 4, R + 2, '#0b0a12', 0.7);
-  pxDisc(sx, sy + 4, R, b.flash > 0.05 ? '#f2eee6' : '#1f4d33', 0.7);
-  pxDisc(sx - 4, sy, R * 0.8, '#2f6b3a', 0.65);
-  pxDisc(sx - 8, sy - 4, R * 0.45, '#4fa04a', 0.6);
-  for (let i = 0; i < 9; i++) {
-    const a = i * 2.39 + 0.5, rr = (i % 3) * 7 + 8;
-    const ex = sx + Math.cos(a) * rr * 1.2, ey = sy + Math.sin(a) * rr * 0.55;
-    const tp = nearestPlayer(b.x, b.y), la = Math.atan2(tp.y - b.y, tp.x - b.x);
-    const blink = Math.floor(now * 2 + i * 1.7) % 7 === 0;
-    pxDisc(ex, ey, 3, '#0b0a12', 0.8);
-    if (blink) { ctx.fillStyle = '#1f4d33'; ctx.fillRect(Math.round(ex - 2), Math.round(ey), 5, 1); continue; }
-    pxDisc(ex, ey, 2, '#f2eee6', 0.8);
-    ctx.fillStyle = b.phase ? '#d8354a' : '#ffd35a';
-    ctx.fillRect(Math.round(ex + Math.cos(la)), Math.round(ey + Math.sin(la) * 0.6), 2, 2);
-  }
-  const mo = Math.abs(Math.sin(now * 1.5)) * 4;
-  ctx.fillStyle = '#0b0a12'; ctx.fillRect(Math.round(sx - 9), Math.round(sy + 12), 18, Math.round(3 + mo));
-  ctx.fillStyle = '#a6e05a';
-  for (let i = 0; i < 4; i++) ctx.fillRect(Math.round(sx - 7 + i * 5), Math.round(sy + 15 + mo + (now * 20 + i * 7) % 6), 1, 2);
-  if (b.lock > b.clock) ringOval(sx, sy + 4, R + 4 + Math.sin(now * 20) * 2, '#a6e05a', 0.7);
-  light(b.x, b.y - z, 90, 0.7);
-  glowAt(b.x, b.y - z, 34, '#4fa04a', 0.3);
-}
-
 // Frost Wyrm: a head that swims through the snow and a long armoured body that follows its path
 function wyrmInit(b) { b.trail = []; b.segs = 14; b.r = 12; b.burrow = 0; }
 function wyrmMove(b, dt, tp, dx, dy, d, enr) {
@@ -385,113 +376,6 @@ function wyrmMove(b, dt, tp, dx, dy, d, enr) {
     for (const pl of G.players) if (!pl.down && Math.hypot(pl.x - x, pl.y - y) < 9) hurtPlayer(14 * b.mul, pl);
   }
 }
-function drawWyrm(b, now) {
-  if (b.burrow > 0) {
-    const [ex, ey] = b.emergeAt;
-    for (let i = 0; i < 3; i++) addPart(ex + rand(-10, 10), ey + rand(-6, 6), rand(-20, 20), rand(-40, -10), 0.4, '#c9f7ff');
-    return;
-  }
-  for (let i = b.trail.length - 1; i >= 6; i -= 6) {
-    const [x, y] = b.trail[i], k = 1 - i / (b.segs * 6 + 6), r = Math.round(4 + k * 6);
-    pxDisc(x - camX, y - camY, r + 1, '#0b0a12', 0.85);
-    pxDisc(x - camX, y - camY, r, b.flash > 0.05 ? '#fff' : '#3f8ee0', 0.85);
-    pxDisc(x - camX - 1, y - camY - 2, r * 0.55, '#8ff0ff', 0.7);
-    ctx.fillStyle = '#c9f7ff'; ctx.fillRect(Math.round(x - camX), Math.round(y - camY - r - 2), 1, 3);
-  }
-  const a = b.trail.length > 6 ? Math.atan2(b.y - b.trail[6][1], b.x - b.trail[6][0]) : 0;
-  const hx = b.x - camX, hy = b.y - camY;
-  pxDisc(hx, hy, 12, '#0b0a12', 0.8); pxDisc(hx, hy, 11, b.flash > 0.05 ? '#fff' : '#1d3d7a', 0.8); pxDisc(hx - 2, hy - 2, 7, '#3f8ee0', 0.8);
-  for (const s of [-1, 1]) {
-    const ex = hx + Math.cos(a + s * 0.5) * 6, ey = hy + Math.sin(a + s * 0.5) * 4 - 2;
-    ctx.fillStyle = '#fff'; ctx.fillRect(Math.round(ex), Math.round(ey), 2, 2);
-    pxLine(hx - Math.cos(a + s * 0.9) * 6, hy - 4, hx - Math.cos(a + s * 0.9) * 13, hy - 12, '#c9f7ff', 1);
-  }
-  const jaw = Math.abs(Math.sin(now * 4)) * 3 + (b.lock > b.clock ? 4 : 0);
-  pxLine(hx + Math.cos(a) * 9, hy + Math.sin(a) * 6, hx + Math.cos(a) * (14 + jaw), hy + Math.sin(a) * 6 + jaw, '#0b0a12', 3);
-  light(b.x, b.y, 70, 0.8); glowAt(b.x, b.y, 24, '#8ff0ff', 0.4);
-}
-
-// Cinder Titan: a hulk of basalt plates held together by magma
-function drawTitan(b, now) {
-  const sx = b.x - camX, sy = b.y - camY, swing = Math.sin(now * 2) * 3, lockGlow = b.lock > b.clock;
-  shadow(b.x, b.y + 24, 54);
-  const plate = (x, y, w, h, c) => { ctx.fillStyle = '#0b0a12'; ctx.fillRect(Math.round(sx + x - 1), Math.round(sy + y - 1), w + 2, h + 2); ctx.fillStyle = b.flash > 0.05 ? '#f2eee6' : c; ctx.fillRect(Math.round(sx + x), Math.round(sy + y), w, h); };
-  plate(-30 - swing, -12, 12, 26, '#2a2538'); plate(18 + swing, -12, 12, 26, '#2a2538');
-  plate(-34 - swing, 12, 14, 10, '#36304f'); plate(20 + swing, 12, 14, 10, '#36304f');
-  plate(-18, -22, 36, 36, '#36304f'); plate(-12, -34, 24, 14, '#2a2538'); plate(-14, 14, 11, 12, '#2a2538'); plate(3, 14, 11, 12, '#2a2538');
-  const heat = lockGlow ? '#fff3b0' : b.phase ? '#ffd35a' : '#e8742c';
-  ctx.fillStyle = heat;
-  for (const [x, y, w, h] of [[-2, -20, 2, 30], [-14, -6, 28, 2], [-8, 4, 2, 9], [8, -14, 2, 8]]) ctx.fillRect(Math.round(sx + x), Math.round(sy + y), w, h);
-  ctx.fillRect(Math.round(sx - 7), Math.round(sy - 29), 4, 3); ctx.fillRect(Math.round(sx + 3), Math.round(sy - 29), 4, 3);
-  if (Math.random() < 0.4) addPart(b.x + rand(-16, 16), b.y - 20, rand(-6, 6), rand(-40, -15), 0.7, pick(['#ffd35a', '#e8742c']));
-  light(b.x, b.y - 10, 100, 1); glowAt(b.x, b.y - 8, 40, '#e8742c', 0.4);
-}
-
-// The Watcher: one enormous eye, ringed by writhing tentacles
-function drawWatcher(b, now) {
-  const sx = b.x - camX, sy = b.y - camY - 10, fade = b.blinkT > 0 ? Math.abs(Math.cos(b.blinkT * 6)) : 1;
-  ctx.globalAlpha = fade;
-  for (let i = 0; i < 8; i++) {
-    const base = i / 8 * TAU + now * 0.4;
-    let px0 = sx + Math.cos(base) * 20, py0 = sy + Math.sin(base) * 14;
-    for (let s = 1; s < 9; s++) {
-      const a = base + Math.sin(now * 2 + i + s * 0.6) * 0.5;
-      const px1 = px0 + Math.cos(a) * 5, py1 = py0 + Math.sin(a) * 4;
-      pxLine(px0, py0, px1, py1, s % 2 ? '#4a2470' : '#9a4fd0', Math.max(1, 4 - (s >> 1)));
-      px0 = px1; py0 = py1;
-    }
-  }
-  pxDisc(sx, sy, 22, '#0b0a12', 0.95); pxDisc(sx, sy, 20, b.flash > 0.05 ? '#fff' : '#f2eee6', 0.95);
-  for (let i = 0; i < 7; i++) { const a = i * 0.9; pxLine(sx + Math.cos(a) * 19, sy + Math.sin(a) * 18, sx + Math.cos(a) * 12, sy + Math.sin(a) * 11, '#d8354a', 1); }
-  const tp = nearestPlayer(b.x, b.y), la = Math.atan2(tp.y - b.y, tp.x - b.x);
-  const ix = sx + Math.cos(la) * 7, iy = sy + Math.sin(la) * 6;
-  pxDisc(ix, iy, 9, '#9a4fd0', 1); pxDisc(ix, iy, 6, '#e27bf0', 1);
-  pxDisc(ix, iy, b.lock > b.clock ? 2 : 4, '#0b0a12', 1);
-  ctx.fillStyle = '#fff'; ctx.fillRect(Math.round(ix - 3), Math.round(iy - 3), 2, 2);
-  ctx.globalAlpha = 1;
-  light(b.x, b.y - 10, 110, 0.9); glowAt(b.x, b.y - 10, 40, '#e27bf0', 0.35);
-}
-
-// Eclipse Herald: a winged silhouette crowned by a black sun
-function drawHerald(b, now) {
-  const sx = b.x - camX, sy = b.y - camY - 14 + Math.sin(now * 2) * 3, flap = Math.sin(now * 5) * 0.35;
-  for (const s of [-1, 1]) for (let f = 0; f < 7; f++) {
-    const a = -Math.PI / 2 + s * (0.5 + f * 0.22 + flap * (f / 7)), len = 26 + f * 3;
-    pxLine(sx + s * 3, sy, sx + s * 3 + Math.cos(a) * len * s * s, sy + Math.sin(a) * len * 0.8 + f * 3, f % 2 ? '#1c1a2b' : '#36304f', 2);
-    if (f === 6) { ctx.fillStyle = '#e27bf0'; ctx.fillRect(Math.round(sx + s * 3 + Math.cos(a) * len), Math.round(sy + Math.sin(a) * len * 0.8 + f * 3), 1, 1); }
-  }
-  ctx.fillStyle = '#0b0a12'; ctx.fillRect(Math.round(sx - 5), Math.round(sy - 6), 10, 24);
-  ctx.fillStyle = b.flash > 0.05 ? '#fff' : '#2a2538'; ctx.fillRect(Math.round(sx - 4), Math.round(sy - 5), 8, 22);
-  ctx.fillStyle = '#f2eee6'; ctx.fillRect(Math.round(sx - 3), Math.round(sy - 12), 6, 7);
-  ctx.fillStyle = '#e27bf0'; ctx.fillRect(Math.round(sx - 2), Math.round(sy - 10), 1, 1); ctx.fillRect(Math.round(sx + 1), Math.round(sy - 10), 1, 1);
-  pxDisc(sx, sy - 24, 9, '#ffd35a', 1); pxDisc(sx, sy - 24, 8, '#0b0a12', 1);
-  ringOval(sx, sy - 24, 11 + Math.sin(now * 6), '#fff3b0', 1);
-  light(b.x, b.y - 30, 100, 1); glowAt(b.x, b.y - 38, 30, '#ffd35a', 0.5);
-}
-
-// Leviathan: a head in the surf and tentacles that crash across the island
-function drawLeviathan(b, now) {
-  const sx = b.x - camX, sy = b.y - camY, up = b.surf ?? 1;
-  for (let i = 0; i < 3; i++) ringOval(sx, sy + 8, 26 + i * 6 + Math.sin(now * 3 + i) * 2, '#4a7c86', 0.5);
-  const h = Math.round(26 * up);
-  ctx.save(); ctx.beginPath(); ctx.rect(sx - 40, sy - 60, 80, 66); ctx.clip();
-  pxDisc(sx, sy + 6 - h, 22, '#0b0a12', 0.9); pxDisc(sx, sy + 6 - h, 20, b.flash > 0.05 ? '#fff' : '#1d3d7a', 0.9);
-  pxDisc(sx - 4, sy + 2 - h, 12, '#3f8ee0', 0.8);
-  for (const s of [-1, 1]) { pxDisc(sx + s * 9, sy - h, 3, '#ffd35a', 1); ctx.fillStyle = '#0b0a12'; ctx.fillRect(Math.round(sx + s * 9), Math.round(sy - h - 2), 1, 4); }
-  ctx.fillStyle = '#0b0a12'; ctx.fillRect(Math.round(sx - 10), Math.round(sy + 12 - h), 20, 4);
-  ctx.fillStyle = '#f2eee6'; for (let i = 0; i < 5; i++) ctx.fillRect(Math.round(sx - 9 + i * 4), Math.round(sy + 12 - h), 1, 2);
-  ctx.restore();
-  for (const t of b.tentacles || []) {
-    const tx = t.x - camX, ty = t.y - camY, rise = Math.min(1, t.t / 0.5);
-    for (let s = 0; s < 10; s++) {
-      const k = s / 10, a = t.ang + Math.sin(now * 3 + s * 0.6) * 0.25 * (1 - rise * 0.5);
-      const px = tx + Math.cos(a) * s * 6 * rise, py = ty + Math.sin(a) * s * 4 * rise - Math.sin(k * Math.PI) * 18 * rise;
-      pxDisc(px, py, Math.max(2, 7 - s * 0.5), s % 2 ? '#1d3d7a' : '#3f8ee0', 1);
-    }
-  }
-  light(b.x, b.y - 10, 90, 0.8); glowAt(b.x, b.y, 30, '#3f8ee0', 0.3);
-}
-
 /* ---------- The bosses ---------- */
 const BOSS_DEFS = {
   colossus: {
@@ -507,7 +391,7 @@ const BOSS_DEFS = {
     extraDraw(b, now) { if (b.phase) glowAt(b.x, b.y - 4, 18, '#8ff0ff', 0.4 + Math.sin(now * 6) * 0.2); },
   },
   mother: {
-    name: 'The Rotting Mother', hp: 11000, spd: 30, r: 26, color: '#4fa04a', draw: drawMother, phases: [0.6, 0.25],
+    name: 'The Rotting Mother', hp: 11000, spd: 30, r: 26, color: '#4fa04a', phases: [0.6, 0.25],
     phaseLines: ['She splits her own skin', 'Every eye opens'],
     frames: () => SPR.slime,
     attacks: [
@@ -530,7 +414,7 @@ const BOSS_DEFS = {
     ],
   },
   wyrm: {
-    name: 'The Frost Wyrm', hp: 9000, spd: 42, r: 12, color: '#8ff0ff', draw: drawWyrm, init: wyrmInit, move: wyrmMove, phases: [0.5],
+    name: 'The Frost Wyrm', hp: 9000, spd: 42, r: 12, color: '#8ff0ff', init: wyrmInit, move: wyrmMove, phases: [0.5],
     phaseLines: ['The blizzard answers its call'], frames: () => SPR.snowwisp,
     attacks: [
       { id: 'icicles', dur: 2, run: (b, t) => A.rain(b, t, 12 + b.phase * 6, 110, 16, { color: '#8ff0ff', liveColor: '#fff' }) },
@@ -543,7 +427,7 @@ const BOSS_DEFS = {
     ],
   },
   titan: {
-    name: 'The Cinder Titan', hp: 12000, spd: 26, r: 24, color: '#e8742c', draw: drawTitan, frames: () => SPR.golem, phases: [0.5],
+    name: 'The Cinder Titan', hp: 12000, spd: 26, r: 24, color: '#e8742c', frames: () => SPR.golem, phases: [0.5],
     phaseLines: ['Its core cracks open'],
     attacks: [
       { id: 'cracks', w: 2, dur: 2, run: (b) => A.lines(b, 6 + b.phase * 2, 220, 14, { liveColor: '#ffd35a' }) },
@@ -554,7 +438,7 @@ const BOSS_DEFS = {
     ],
   },
   watcher: {
-    name: 'The Watcher', hp: 14000, spd: 20, r: 22, color: '#e27bf0', draw: drawWatcher, frames: () => SPR.swarmeye, phases: [0.66, 0.33],
+    name: 'The Watcher', hp: 14000, spd: 20, r: 22, color: '#e27bf0', frames: () => SPR.swarmeye, phases: [0.66, 0.33],
     phaseLines: ['It sees through you', 'Reality unravels'],
     move(b, dt, tp, dx, dy, d) { if (b.blinkT > 0) { b.blinkT -= dt; if (b.blinkT <= 0.6 && b.blinkTo) { b.x = b.blinkTo[0]; b.y = b.blinkTo[1]; b.blinkTo = null; } return; } if (d > 120 && b.lock <= b.clock) { b.x += dx / d * 30 * dt; b.y += dy / d * 30 * dt; } },
     attacks: [
@@ -566,7 +450,7 @@ const BOSS_DEFS = {
     ],
   },
   leviathan: {
-    name: 'The Leviathan', hp: 16000, spd: 0, r: 22, color: '#3f8ee0', draw: drawLeviathan, frames: () => SPR.swarmeye, phases: [0.5],
+    name: 'The Leviathan', hp: 16000, spd: 0, r: 22, color: '#3f8ee0', frames: () => SPR.swarmeye, phases: [0.5],
     phaseLines: ['The sea itself rises'],
     init(b) { b.tentacles = []; b.surf = 1; b.anchored = true; },
     move(b, dt) {
@@ -584,7 +468,7 @@ const BOSS_DEFS = {
     ],
   },
   herald: {
-    name: 'The Eclipse Herald', hp: 24000, spd: 54, r: 14, color: '#ffd35a', draw: drawHerald, frames: () => SPR.wraith, phases: [0.66, 0.33],
+    name: 'The Eclipse Herald', hp: 24000, spd: 54, r: 14, color: '#ffd35a', frames: () => SPR.wraith, phases: [0.66, 0.33],
     phaseLines: ['Its black sun widens', 'The last light goes out'],
     attacks: [
       { id: 'feathers', dur: 1.8, run: (b, t) => A.fan(b, t, 11 + b.phase * 4, 1.6, 120, { style: 'feather', c: '#e27bf0' }, 3, 0.35) },
@@ -608,14 +492,6 @@ const BOSS_DEFS = {
       { id: 'knives', dur: 1.6, run: (b, t) => A.fan(b, t, 5, 0.7, 150, { style: 'knife', c: '#b5b2c4' }, 3, 0.3) },
       { id: 'dash', dur: 2.2, run: (b, t) => A.dash(b, t, 2, 360) },
       { id: 'rally', dur: 1.2, run: (b) => A.summon(b, ['bandit', 'archer'], 4, 40) },
-    ],
-  },
-  stag: {
-    name: 'The Dread Stag', hp: 5000, spd: 58, r: 16, color: '#8ff0ff', scale: 2, frames: () => SPR.stag, phases: [0.5],
-    attacks: [
-      { id: 'charge', w: 2, dur: 3.4, run: (b, t) => A.dash(b, t, 3, 380) },
-      { id: 'antlers', dur: 1.6, run: (b) => A.ring(b, 18, 85, { c: '#8ff0ff', style: 'shard' }, 2, 0.4) },
-      { id: 'stomp', dur: 2, run: (b) => A.wave(b, 150, 2, { color: '#8ff0ff' }) },
     ],
   },
   brute: {

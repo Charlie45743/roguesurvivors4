@@ -382,7 +382,11 @@ function hostMsg(d) {
     case 'reroll': if (Net.lvl && G.rerolls > 0) { G.rerolls--; sendGuestLevel(); } break;
     case 'mpick': { const def = Net.modal; Net.modal = null; const b = def && def.buttons[d.i]; if (b && !b.disabled && b.act) asGuest(() => b.act()); release(); break; }
     case 'mclose': Net.modal = null; release(); break;
-    case 'done': Net.chest = false; release(); break;
+    case 'done':
+      Net.chest = false;
+      if (G.hostChestOwed) { const note = G.hostChestOwed; G.hostChestOwed = null; openChest(true, note, ME); }   // the crypt gave the host a chest as well
+      else release();
+      break;
     case 'cryptDone': {
       Net.crypt = false;
       g.hp = clamp(d.hp, 0, g.maxHp); G.gold += d.gold; G.kills += d.kills;
@@ -394,6 +398,7 @@ function hostMsg(d) {
         for (let i = 0; i < (d.deep || 0); i++) dropAt('chest', g.x + 18 * (i + 1), g.y + 10, { boss: true });
         for (const t of d.rescued || []) if (ALLY_TYPES[t]) recruit(t, g);
         Mods.call('remoteChest', g, true);
+        G.hostChestOwed = { icon: 'star', name: 'Crypt cleared by your partner', lv: 'A chest for each of you' };
       }
       release();
       break;
@@ -411,14 +416,26 @@ function guestLevelDone() {
   if (Net.afterGuest) { const f = Net.afterGuest; Net.afterGuest = null; f(); }
   else release();
 }
+/* Level-ups are one player at a time: the host chooses while the guest's screen is held, then the guest chooses while the
+   host waits. Each level gives both of them an upgrade. */
 const baseOpenLevelUp = openLevelUp;
 openLevelUp = function () {
-  if (Net.role === 'host' && Net.active() && !Net.lvl && guestPl() && !guestPl().down) { Net.lvl = true; sendGuestLevel(); }
+  if (Net.role === 'host' && Net.active() && !Net.lvl && guestPl() && !guestPl().down) {
+    G.guestOwed = true;
+    Net.send({ t: 'hold', text: 'Your partner is choosing an upgrade...' });
+  }
   baseOpenLevelUp();
 };
 const baseFinishLevel = finishLevel;
 finishLevel = function () {
-  if (Net.role === 'host' && Net.lvl) { Net.afterGuest = baseFinishLevel; setState('wait'); $('waitText').textContent = 'Your partner is choosing an upgrade...'; return; }
+  if (Net.role === 'host' && G.guestOwed && !(G.lvQueue && G.lvQueue.length)) {
+    G.guestOwed = false;
+    if (Net.active() && guestPl() && !guestPl().down) {
+      Net.lvl = true; sendGuestLevel();
+      Net.afterGuest = baseFinishLevel; setState('wait'); $('waitText').textContent = 'Your partner is choosing an upgrade...';
+      return;
+    }
+  }
   baseFinishLevel();
 };
 const baseUpdate = update;
@@ -522,8 +539,14 @@ function guestMsg(d) {
     Net.hpause = d.on;
     if (d.on && state === 'play') { $('waitText').textContent = 'Your partner has paused the game. Please wait.'; setState('wait'); }
     else if (!d.on && state === 'wait') setState('play');
-  } else if (d.t === 'snap') applySnap(d);
-  else if (d.t === 'lvl') showGuestLevel(d);
+  } else if (d.t === 'hold') {   // the host is choosing an upgrade: this screen freezes until its turn
+    Net.hold = true;
+    if (state === 'play') { $('waitText').textContent = d.text; setState('wait'); }
+  } else if (d.t === 'snap') {
+    if (Net.hold && state === 'wait' && !Net.hpause) setState('play');   // the host is simulating again
+    Net.hold = false;
+    applySnap(d);
+  } else if (d.t === 'lvl') { Net.hold = false; showGuestLevel(d); }
   else if (d.t === 'modal') openModal({ ...d.def, buttons: d.def.buttons.map((b, i) => ({ ...b, act: () => Net.send({ t: 'mpick', i }) })) }, ME);
   else if (d.t === 'chest') {
     Snd.play('chest');
@@ -621,7 +644,7 @@ function applySnap(s) {
   for (const name of s.sfx) Snd.play(name);
   for (const [bt, bs, bc] of s.bn) banner(bt, bs, bc);
   for (const [x, y, type, sc] of s.kl) { const f = (SPR[ENEMIES[type]?.spr] || SPR.ghoul)[0]; disintegrate({ x, y }, f, sc); }
-  G.ev = s.ev ? { kind: s.ev[0], x: s.ev[0] === 'bloodmoon' || s.ev[0] === 'hunt' ? undefined : s.ev[1], y: s.ev[2], t: s.ev[3], fall: s.ev[4] < 0 ? undefined : s.ev[4], mine: s.ev[5], dur: s.ev[6], name: s.ev[7] } : null;
+  G.ev = s.ev ? { kind: s.ev[0], x: s.ev[0] === 'bloodmoon' ? undefined : s.ev[1], y: s.ev[2], t: s.ev[3], fall: s.ev[4] < 0 ? undefined : s.ev[4], mine: s.ev[5], dur: s.ev[6], name: s.ev[7] } : null;
   if (s.boss) { G.boss = { name: s.boss[0], hp: s.boss[1], maxHp: 1 }; $('bossname').textContent = s.boss[0]; $('bossbar').classList.remove('hidden'); }
   else if (G.boss) { G.boss = null; $('bossbar').classList.add('hidden'); }
   if (over && !G.over) { G.over = true; }
@@ -689,7 +712,12 @@ pickChoice = function (i) { if (G && G.remote) { if (i < (G.netCards || 0)) gues
 // Guest dungeons are played here and reported back to the host
 const coopFinish = finishCrypt, coopDeath = cryptDeath;
 finishCrypt = function () {
-  if (!(G && G.remote)) { coopFinish(); return; }
+  if (!(G && G.remote)) {
+    coopFinish();
+    // the host's crypt hands the guest a chest too
+    if (Net.role === 'host' && Net.active() && guestPl() && !guestPl().down) Mods.call('remoteChest', guestPl(), true);
+    return;
+  }
   const theme = D.theme || 'crypt', swift = D.t <= CRYPT_PAR * (D.floor || 1);
   const deep = D.deep || 0, relic = cryptRelic(theme, deep), frag = cryptFrag(theme, deep, D.oreCount || 0), rescued = [...(D.rescued || [])];
   if (swift) P.hp = P.maxHp;

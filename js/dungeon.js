@@ -43,10 +43,11 @@ const ACT = {
   left: ['KeyA', 'ArrowLeft'], right: ['KeyD', 'ArrowRight'], down: ['KeyS', 'ArrowDown'],
   jump: ['Space', 'KeyW', 'ArrowUp', 'KeyK'], attack: ['KeyJ', 'KeyX'], roll: ['ShiftLeft', 'ShiftRight', 'KeyL', 'KeyC'],
 };
-const dpress = {}, touchHeld = {}, bot = {};
-function held(a) {
-  if (SIM) return !!bot[a];
-  if (ACT[a].some(k => keys[k]) || touchHeld[a]) return true;
+const dpress = {}, touchHeld = {}, bot = {}, ptrPress = {};
+let curHold = null;   // what the body being stepped is holding (null: the keyboard and the pointer, as in a solo run)
+// A finger or the mouse: the on-screen buttons and the drag stick
+function pointerHeld(a) {
+  if (touchHeld[a]) return true;
   if (joy.active) {
     const dx = joy.x - joy.ox, dy = joy.y - joy.oy;
     if (a === 'left') return dx < -12;
@@ -55,15 +56,19 @@ function held(a) {
   }
   return false;
 }
+function held(a) {
+  if (curHold) return !!curHold[a];
+  if (SIM) return !!bot[a];
+  return ACT[a].some(k => keys[k]) || pointerHeld(a);
+}
 addEventListener('keydown', e => {
   if (state !== 'dungeon') return;
   for (const a in ACT) if (ACT[a].includes(e.code) && !e.repeat) dpress[a] = true;
   if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
 });
-cv.addEventListener('pointerdown', e => { if (state === 'dungeon' && e.pointerType === 'mouse') dpress.attack = true; });
 document.querySelectorAll('#dpad [data-act]').forEach(b => {
   const a = b.dataset.act, up = () => { touchHeld[a] = false; };
-  b.addEventListener('pointerdown', e => { e.preventDefault(); dpress[a] = true; touchHeld[a] = true; });
+  b.addEventListener('pointerdown', e => { e.preventDefault(); if (state === 'dungeon') { dpress[a] = true; ptrPress[a] = true; } touchHeld[a] = true; });
   b.addEventListener('pointerup', up); b.addEventListener('pointerleave', up); b.addEventListener('pointercancel', up);
 });
 
@@ -215,6 +220,35 @@ function dtext(x, y, val, crit, color) {
   D.texts.push({ x, y, s: String(val) + (crit ? '!' : ''), c: color || (crit ? '#ffd35a' : '#f2eee6'), life: 0.7, max: 0.7 });
 }
 
+/* ---------- Bodies ----------
+   Everyone in the party goes below together: D.bodies holds one body per player. DP and P always name the body and the
+   player being stepped (like P in the night), and asBody swaps them in. Outside it, DP is the first body. */
+function makeBody(pl, i) {
+  const local = !!(G && G.local);
+  return { pl, i, x: D.start.x + i * 7, y: D.start.y, vx: 0, vy: 0, w: 8, h: 13, face: 1, onGround: false, coyote: 0, jumpBuf: 0, jumps: 1,
+    roll: 0, rollCd: 0, atkT: 0, atkCd: 0, step: 0, lastAtk: -9, inv: 0, drop: 0, anim: 0, plat: null, hurt: 0, out: false,
+    hold: local ? {} : null, press: local ? {} : null };
+}
+const cryptCrew = () => (G.local ? G.players.filter(p => !p.down) : [ME]);
+let bodyDepth = 0;
+function asBody(b, fn) {
+  const kd = DP, kp = P, kh = curHold, top = bodyDepth++ === 0;   // only the outermost swap owns the press flags
+  DP = b; P = b.pl; curHold = b.hold;
+  if (top && b.press) for (const k in ACT) dpress[k] = !!b.press[k];
+  try { return fn(b); } finally {
+    if (top && b.press) for (const k in ACT) { b.press[k] = !!dpress[k]; dpress[k] = false; }
+    bodyDepth--;
+    DP = kd; P = kp; curHold = kh;
+  }
+}
+const eachBody = fn => { for (const b of D.bodies.slice()) { if (!D || D.dead) break; if (!b.out) asBody(b, fn); } };
+const nearestBody = (x, y) => {
+  let best = null, bd = Infinity;
+  for (const b of D.bodies) { if (b.out) continue; const d = Math.abs(b.x - x) + Math.abs(b.y - y) * 2; if (d < bd) { bd = d; best = b; } }
+  return best || D.bodies[0];
+};
+const bodyNear = (x, y, rx, ry) => D.bodies.find(b => !b.out && Math.abs(b.x - x) < rx && Math.abs(b.y - y) < ry);
+
 /* ---------- Enter / leave ---------- */
 function enterCrypt(c) {
   if (c) G.crypts = G.crypts.filter(x => x !== c);
@@ -266,17 +300,25 @@ function cryptDeath() {
     Snd.play('evolve');
     return;
   }
-  D.dead = true;
   dburst(DP.x, DP.y - 6, '#d8354a', 30, 120);
   Snd.play('death');
-  setTimeout(() => leaveCrypt(() => playerDown()), 900);
+  // a partner still stands: this one sits out until the crypt is won
+  if (D.bodies.some(b => b !== DP && !b.out)) {
+    DP.out = true; P.hp = 0; P.down = true; P.reviveT = 0;
+    banner(P.ch.name + ' has fallen', 'The others must finish the crypt', '#d8354a');
+    return;
+  }
+  D.dead = true;
+  DP.out = true;
+  const last = P;
+  setTimeout(() => leaveCrypt(() => { P = last; playerDown(); P = ME; }), 900);
 }
 
 /* ---------- Combat ---------- */
 function hurtCrypt(dmg, spike) {
   if (DP.inv > 0 || (DP.roll > 0 && !spike) || D.dead || G.god) return;
   const d = Math.max(1, Math.round(dmg * (1 + G.t / 900) - P.armor));
-  P.hp -= d; DP.inv = 0.9; D.shake = 4; D.hurt = 0.3;
+  P.hp -= d; DP.inv = 0.9; D.shake = 4; DP.hurt = 0.3;
   if (!spike) { DP.vx = -DP.face * 140; DP.vy = -150; }
   dtext(DP.x, DP.y - 18, d, false, '#d8354a');
   dburst(DP.x, DP.y - 6, '#d8354a', 6, 60);
@@ -328,8 +370,7 @@ function updateCrypt(dt) {
   if (SIM) driveBot();
   D.t += dt;
   D.shake = Math.max(0, D.shake - dt * 16);
-  D.hurt = Math.max(0, D.hurt - dt);
-  updateCryptPlayer(dt);
+  eachBody(() => { DP.hurt = Math.max(0, DP.hurt - dt); updateCryptPlayer(dt); });
   updateCryptFoes(dt);
   updateArrows(dt);
   updateCryptFx(dt);
@@ -339,8 +380,9 @@ function updateCrypt(dt) {
     banner('Crypt cleared', D.t <= CRYPT_PAR ? 'Swift! Claim your bonus treasure' : 'Claim your treasure', '#ffd35a');
     Snd.play('levelup');
   }
-  if (D.chest && Math.abs(DP.x - D.chest.x) < 10 && Math.abs(DP.y - D.chest.y) < 14) finishCrypt();
+  if (D.chest && !D.dead) { const b = bodyNear(D.chest.x, D.chest.y, 10, 14); if (b) asBody(b, finishCrypt); }
   for (const k in dpress) dpress[k] = false;
+  for (const b of D.bodies) if (b.press) for (const k in ACT) b.press[k] = false;
   updateCryptHud();
 }
 
@@ -384,8 +426,10 @@ function updateCryptPlayer(dt) {
 }
 
 function updateCryptFoes(dt) {
+  const keepBody = DP, keepPlayer = P;
   for (const e of D.ents) {
     if (e.dead) continue;
+    if (D.bodies.length > 1) { DP = nearestBody(e.x, e.y); P = DP.pl; }
     e.anim += dt; e.flash -= dt; e.t -= dt; e.cd -= dt; e.stun -= dt;
     const dx = DP.x - e.x, dy = (DP.y - 6) - (e.y - e.h / 2), adx = Math.abs(dx);
     const aware = adx < 170 && Math.abs(dy) < 70;
@@ -449,6 +493,7 @@ function updateCryptFoes(dt) {
       if (e.fly) e.t = 0.7;
     }
   }
+  DP = keepBody; P = keepPlayer;
 }
 
 function updateArrows(dt) {
@@ -456,7 +501,8 @@ function updateArrows(dt) {
     a.vy += 120 * dt; a.x += a.vx * dt; a.y += a.vy * dt; a.life -= dt;
     if (a.life <= 0 || isSolid(Math.floor(a.x / DT), Math.floor(a.y / DT))) { a.dead = true; dburst(a.x, a.y, '#b5b2c4', 3, 40); continue; }
     if (a.foe) {
-      if (a.x > DP.x - 4 && a.x < DP.x + 4 && a.y > DP.y - 13 && a.y < DP.y) { hurtCrypt(10); a.dead = true; }
+      const b = D.bodies.find(q => !q.out && a.x > q.x - 4 && a.x < q.x + 4 && a.y > q.y - 13 && a.y < q.y);
+      if (b) { asBody(b, () => hurtCrypt(10)); a.dead = true; }
     } else {
       for (const e of D.ents) if (!e.dead && boxHit(a.x - 2, a.y - 2, a.x + 2, a.y + 2, e)) { cryptHit(e, 30 * P.might, Math.sign(a.vx), false); a.dead = true; break; }
     }
@@ -568,22 +614,8 @@ function renderCrypt() {
     light(a.x, a.y, 14, 0.5);
   }
 
-  // Player
-  const p = DP;
-  if (!D.dead && !(p.inv > 0 && p.roll <= 0 && Math.floor(now * 20) % 2)) {
-    const f = !p.onGround ? P.frames[1] : Math.abs(p.vx) > 20 ? P.frames[Math.floor(p.anim) % 4] : P.frames[0];
-    shadow(p.x, p.y, 8);
-    if (p.roll > 0) {
-      for (let i = 1; i <= 2; i++) { ctx.globalAlpha = 0.25 / i; blit(f.c, p.x - p.face * i * 7, p.y - 8, f.w, f.h, p.face < 0); }
-      ctx.globalAlpha = 1;
-      ctx.save();
-      ctx.translate(Math.round(p.x - camX), Math.round(p.y - 7 - camY));
-      ctx.rotate((1 - p.roll / 0.32) * TAU * p.face);
-      ctx.drawImage(f.c, -f.w / 2, -f.h / 2);
-      ctx.restore();
-    } else blit(f.c, p.x, p.y - 8, f.w, f.h, p.face < 0);
-  }
-  light(p.x, p.y - 8, 90, 1);
+  // Players
+  for (const b of D.bodies) if (!b.out && !D.dead) asBody(b, () => drawBody(now));
 
   for (const f of D.fx) {
     const k = f.t / f.dur;
@@ -631,11 +663,35 @@ function renderCrypt() {
   ctx.globalCompositeOperation = 'source-over';
 
   for (const t of D.texts) drawText(ctx, t.s, t.x - camX, t.y - camY, t.c, 1);
-  if (!D.dead) {
-    const bx = Math.round(p.x - camX - 9), by = Math.round(p.y - camY + 3);
+  if (!D.dead) for (const b of D.bodies) if (!b.out) {
+    const bx = Math.round(b.x - camX - 9), by = Math.round(b.y - camY + 3);
     ctx.fillStyle = '#0b0a12'; ctx.fillRect(bx - 1, by - 1, 20, 4);
     ctx.fillStyle = '#7a1a2a'; ctx.fillRect(bx, by, 18, 2);
-    ctx.fillStyle = '#d8354a'; ctx.fillRect(bx, by, Math.round(18 * clamp(P.hp / P.maxHp, 0, 1)), 2);
+    ctx.fillStyle = '#d8354a'; ctx.fillRect(bx, by, Math.round(18 * clamp(b.pl.hp / b.pl.maxHp, 0, 1)), 2);
+    if (D.bodies.length > 1) {   // a coloured marker tells the party apart
+      const mx = Math.round(b.x - camX), my = Math.round(b.y - camY) - 26;
+      ctx.fillStyle = PLAYER_COLORS[G.players.indexOf(b.pl) % PLAYER_COLORS.length];
+      ctx.fillRect(mx - 2, my, 5, 1); ctx.fillRect(mx - 1, my + 1, 3, 1); ctx.fillRect(mx, my + 2, 1, 1);
+    }
   }
-  if (D.hurt > 0) { ctx.fillStyle = `rgba(216,53,74,${D.hurt * 0.6})`; ctx.fillRect(0, 0, W, H); }
+  if (DP.hurt > 0) { ctx.fillStyle = `rgba(216,53,74,${DP.hurt * 0.6})`; ctx.fillRect(0, 0, W, H); }
+}
+
+// One player's body: tumbling when rolling, flickering while invulnerable, lit by its own lantern
+function drawBody(now) {
+  const p = DP;
+  if (!(p.inv > 0 && p.roll <= 0 && Math.floor(now * 20) % 2)) {
+    const f = !p.onGround ? P.frames[1] : Math.abs(p.vx) > 20 ? P.frames[Math.floor(p.anim) % 4] : P.frames[0];
+    shadow(p.x, p.y, 8);
+    if (p.roll > 0) {
+      for (let i = 1; i <= 2; i++) { ctx.globalAlpha = 0.25 / i; blit(f.c, p.x - p.face * i * 7, p.y - 8, f.w, f.h, p.face < 0); }
+      ctx.globalAlpha = 1;
+      ctx.save();
+      ctx.translate(Math.round(p.x - camX), Math.round(p.y - 7 - camY));
+      ctx.rotate((1 - p.roll / 0.32) * TAU * p.face);
+      ctx.drawImage(f.c, -f.w / 2, -f.h / 2);
+      ctx.restore();
+    } else blit(f.c, p.x, p.y - 8, f.w, f.h, p.face < 0);
+  }
+  light(p.x, p.y - 8, 90, 1);
 }

@@ -225,13 +225,18 @@ addEventListener('blur', () => { for (const k in keys) keys[k] = false; if ((sta
 document.addEventListener('visibilitychange', () => { if (document.hidden && (state === 'play' || state === 'dungeon') && !inCoop()) openPause(); });
 addEventListener('pointerdown', () => { Snd.init(); applyVolume(); });
 cv.addEventListener('pointerdown', e => {
-  if (state !== 'play' && !(state === 'dungeon' && e.pointerType !== 'mouse')) return;
+  if (state !== 'play' && state !== 'dungeon') return;   // the mouse steers like a finger, in the night and below
   if (e.pointerType === 'mouse' && e.button !== 0) return;   // right click interacts instead of steering
   joy.active = true; joy.id = e.pointerId; joy.ox = joy.x = e.clientX; joy.oy = joy.y = e.clientY;
 });
 addEventListener('pointermove', e => { if (joy.active && e.pointerId === joy.id) { joy.x = e.clientX; joy.y = e.clientY; } });
 addEventListener('pointerup', e => { if (e.pointerId === joy.id) joy.active = false; });
 addEventListener('pointercancel', e => { if (e.pointerId === joy.id) joy.active = false; });
+
+// Same roll as the crypt platformer: a short invulnerable tumble on Shift / L / C (or the Roll button on touch)
+const ROLL_KEYS = ['ShiftLeft', 'ShiftRight', 'KeyL', 'KeyC'];
+const ROLL_T = 0.28, ROLL_CD = 0.7, ROLL_SPEED = 3;
+document.querySelector('#dpad [data-act="roll"]').addEventListener('pointerdown', () => { if (state === 'play' && ME) ME.rollReq = 0.15; });
 
 function inputVec() {
   let x = 0, y = 0;
@@ -584,6 +589,7 @@ function killEnemy(e) {
   } else if (Math.random() < 0.004) G.items.push({ k: 'heart', x: e.x, y: e.y, ph: 0 });
   else if (Math.random() < (0.015 + 0.006 * P.midas) * (G.buffs.greed > 0 ? 3 : 1)) G.items.push({ k: 'coin', x: e.x, y: e.y, ph: 0 });
   else if (Math.random() < 0.0015) dropBuff(e.x, e.y);
+  else if (Math.random() < 0.0012) dropRare(e.x, e.y);
 }
 
 function breakProp(e) {
@@ -592,7 +598,8 @@ function breakProp(e) {
   Snd.play('glass');
   const r = Math.random();
   if (r < 0.2) { dropBuff(e.x, e.y); return; }
-  const k = r < 0.42 ? 'heart' : r < 0.7 ? 'coin' : r < 0.8 ? 'bag' : r < 0.91 ? 'magnet' : 'bomb';
+  if (r > 0.96) { dropRare(e.x, e.y); return; }
+  const k = r < 0.42 ? 'heart' : r < 0.7 ? 'coin' : r < 0.8 ? 'bag' : r < 0.9 ? 'magnet' : 'bomb';
   G.items.push({ k, x: e.x, y: e.y, ph: 0 });
 }
 
@@ -619,6 +626,8 @@ function bossDown(e) {
     banner('Dawn breaks', 'The night is over', '#ffd35a');
   } else {
     G.items.push({ k: 'chest', x: e.x, y: e.y, ph: 0, boss: true });
+    dropRare(e.x + 18, e.y + 6);
+    dropBuff(e.x - 18, e.y + 6);
   }
 }
 
@@ -907,7 +916,22 @@ function updatePlayer(dt) {
   if (P.down) { P.moving = false; return; }
   const [ix, iy] = P.dev ? devVec(P.dev) : P === ME ? inputVec() : (P.input || [0, 0]);
   P.moving = !!(ix || iy);
-  if (P.moving) {
+  P.rollCd = Math.max(0, (P.rollCd || 0) - dt);
+  P.rollReq = Math.max(0, (P.rollReq || 0) - dt);
+  if (P.rollReq > 0 && P.rollCd <= 0 && !(P.roll > 0)) {
+    P.rollReq = 0; P.roll = ROLL_T; P.rollCd = ROLL_CD;
+    if (P.moving) { const l = Math.hypot(ix, iy); P.ax = ix / l; P.ay = iy / l; }
+    P.inv = Math.max(P.inv, ROLL_T + 0.02);
+    Snd.play('dash');
+  }
+  if (P.roll > 0) {
+    P.roll -= dt;
+    const spd = P.speed * ROLL_SPEED;
+    P.x += P.ax * spd * dt; P.y += P.ay * spd * dt;
+    if (Math.abs(P.ax) > 0.1) P.face = P.ax > 0 ? 1 : -1;
+    P.moving = false;
+    if (Math.random() < 0.6) addPart(P.x + rand(-3, 3), P.y + 6, -P.ax * 20, -P.ay * 20 - 8, 0.3, '#36304f');
+  } else if (P.moving) {
     const spd = P.speed * (P.wet ? 0.6 : 1) * (G.buffs.haste > 0 ? 1.4 : 1);
     P.x += ix * spd * dt; P.y += iy * spd * dt;
     const l = Math.hypot(ix, iy);
@@ -1484,19 +1508,23 @@ function spawnCrypt() {
   Snd.play('warn');
 }
 function updateCrypts(dt) {
-  if (!G.won && !G.boss && !G.local) {
+  if (!G.won && !G.boss) {
     G.cryptT -= dt;
     if (G.cryptT <= 0) { G.cryptT = rand(150, 200); if (!G.crypts.length) spawnCrypt(); }
   }
   G.nearCrypt = null;
+  const crew = G.local ? G.players : [ME];   // on a shared screen anyone can lead the party down
   for (const c of G.crypts) {
     c.ph += dt;
-    const dx = P.x - c.x, dy = P.y + 6 - c.y, d = Math.hypot(dx, dy) || 1;
-    if (d < 20) G.nearCrypt = c;
-    if (d < 8) { P.x = c.x + dx / d * 8; P.y = c.y + dy / d * 8 - 6; }
+    for (const pl of crew) {
+      if (pl.down) continue;
+      const dx = pl.x - c.x, dy = pl.y + 6 - c.y, d = Math.hypot(dx, dy) || 1;
+      if (d < 20 && (pl === ME || !G.nearCrypt)) G.nearCrypt = c;
+      if (d < 8) { pl.x = c.x + dx / d * 8; pl.y = c.y + dy / d * 8 - 6; }
+    }
     if (Math.random() < dt * 2) addPart(c.x + rand(-6, 6), c.y - 8, rand(-3, 3), rand(-14, -6), 1, '#36304f', 2);
   }
-  G.crypts = G.crypts.filter(c => Math.abs(c.x - P.x) < 1600 && Math.abs(c.y - P.y) < 1600);
+  G.crypts = G.crypts.filter(c => crew.some(pl => Math.abs(c.x - pl.x) < 1600 && Math.abs(c.y - pl.y) < 1600));
 }
 
 /* ---------- Rendering ---------- */
@@ -1643,10 +1671,21 @@ function drawCrypt(c, now) {
 const PLAYER_COLORS = ['#ffd35a', '#8ff0ff', '#e27bf0', '#a6e05a'];
 function render() {
   if (G) P = ME;
-  if (G && D && (state === 'dungeon' || (state === 'pause' && G.pausedFrom === 'dungeon'))) { renderCrypt(); return; }
+  if (G && D && (state === 'dungeon' || (state === 'pause' && G.pausedFrom === 'dungeon'))) { renderCryptViews(); drawJoystick(); return; }
   if (!G || state === 'menu' || state === 'chars' || state === 'altar') { renderMenuBg(); return; }
-  if (G.local && G.players.length > 1) { renderSplit(drawScene); return; }
-  drawScene();
+  if (G.local && G.players.length > 1) renderSplit(drawScene);
+  else drawScene();
+  drawJoystick();
+}
+// The drag stick, shown wherever the mouse or a finger is steering
+function drawJoystick() {
+  if (!joy.active || (state !== 'play' && state !== 'dungeon')) return;
+  const ox = joy.ox / SCALE, oy = joy.oy / SCALE;
+  pxRing(ox, oy, 18, 'rgba(242,238,230,0.35)', 2);
+  let dx = (joy.x - joy.ox) / SCALE, dy = (joy.y - joy.oy) / SCALE;
+  const d = Math.hypot(dx, dy);
+  if (d > 14) { dx = dx / d * 14; dy = dy / d * 14; }
+  pxDisc(ox + dx, oy + dy, 6, 'rgba(242,238,230,0.5)', 1);
 }
 // One view of the night, centred on P. Split-screen calls this once per player (see local.js).
 function drawScene() {
@@ -1713,7 +1752,7 @@ function drawScene() {
 
   // Entities, y-sorted
   const ents = [];
-  for (const e of G.enemies) if (!e.dead && onScreen(e.x, e.y, 30 * (e.scale || 1))) ents.push(e);
+  for (const e of G.enemies) if (!e.dead && onScreen(e.x, e.y, e.cull || 30 * (e.scale || 1))) ents.push(e);
   for (let cx = Math.floor(camX / CH) - 1; cx <= Math.floor((camX + W) / CH) + 1; cx++)
     for (let cy = Math.floor(camY / CH) - 1; cy <= Math.floor((camY + H) / CH) + 1; cy++)
       for (const d of chunk(cx, cy)) if (d.tall && onScreen(d.x, d.y - 10, 30)) ents.push(d);
@@ -1924,18 +1963,25 @@ function drawScene() {
     ctx.fillStyle = `rgba(255,248,230,${Math.min(0.85, G.whiteFlash)})`;
     ctx.fillRect(0, 0, W, H);
   }
-  if (joy.active && state === 'play') {
-    const ox = joy.ox / SCALE, oy = joy.oy / SCALE;
-    pxRing(ox, oy, 18, 'rgba(242,238,230,0.35)', 2);
-    let dx = (joy.x - joy.ox) / SCALE, dy = (joy.y - joy.oy) / SCALE;
-    const d = Math.hypot(dx, dy);
-    if (d > 14) { dx = dx / d * 14; dy = dy / d * 14; }
-    pxDisc(ox + dx, oy + dy, 6, 'rgba(242,238,230,0.5)', 1);
-  }
 }
 
 function drawPlayer(now) {
   if (P.down) { drawFallen(P, now); return; }
+  if (P.roll > 0) {
+    const f = P.frames[0], x = Math.round(P.x - camX), y = Math.round(P.y - camY);
+    shadow(P.x, P.y + 8, 10);
+    for (let i = 1; i <= 2; i++) {
+      ctx.globalAlpha = 0.25 / i;
+      ctx.drawImage(f.c, Math.round(x - P.ax * i * 7 - f.w / 2), Math.round(y - P.ay * i * 7 - f.h / 2));
+    }
+    ctx.globalAlpha = 1;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate((1 - P.roll / ROLL_T) * TAU * P.face);
+    ctx.drawImage(f.c, -f.w / 2, -f.h / 2);
+    ctx.restore();
+    return;
+  }
   if (P.inv > 0 && P.inv < 5 && Math.floor(now * 20) % 2) return;
   animateHero(P, now);
 }
@@ -2075,7 +2121,7 @@ function drawFx() {
       pxRing(f.x - camX, f.y - camY, f.r * (0.5 + p), '#f2eee6', 1);
     } else if (f.k === 'ring') {
       ctx.globalAlpha = 1 - p;
-      pxRing(f.x - camX, f.y - camY, f.r * (0.3 + p * 0.7), f.c, 2);
+      pxRing(f.x - camX, f.y - camY, f.r * (f.rev ? 1 - p * 0.7 : 0.3 + p * 0.7), f.c, 2);   // rev: a ring that closes in
       ctx.globalAlpha = 1;
       light(f.x, f.y, f.r * 1.3, 0.6 * (1 - p));
     } else if (f.k === 'meteor') {
@@ -2155,7 +2201,8 @@ function setState(s) {
   Mods.call('state', s);
   if (s !== 'play') { $('shrinePrompt').classList.add('hidden'); hudLast.prompt = ''; }
   $('dhud').classList.toggle('hidden', s !== 'dungeon');
-  $('dpad').classList.toggle('hidden', !(s === 'dungeon' && matchMedia('(pointer: coarse)').matches));
+  $('dpad').classList.toggle('hidden', s !== 'dungeon' && s !== 'play');
+  $('dpad').classList.toggle('roll-only', s === 'play');
   $('mute').classList.toggle('hidden', ['play', 'levelup', 'chest', 'shrine', 'dungeon', 'fading'].includes(s));
   joy.active = false;
 }
@@ -2262,13 +2309,32 @@ function applyChoice(c) {
   refreshSlots();
 }
 
+function withPlayer(pl, fn) {
+  const keep = P; P = pl;
+  try { return fn(); } finally { P = keep; }
+}
+// Shown above a menu that belongs to one player of a shared screen
+function whoLabel(pl, what) {
+  const i = G.players.indexOf(pl);
+  return G.local && i >= 0 ? { text: `Player ${i + 1} · ${pl.ch.name}${what}`, color: PLAYER_COLORS[i % PLAYER_COLORS.length] } : { text: '', color: '' };
+}
+function setWho(id, pl, what) {
+  const w = whoLabel(pl, what), el = $(id);
+  el.textContent = w.text; el.style.color = w.color;
+}
+
 let luSel = 0;
+// Every level gives every standing player an upgrade of their own. They choose one after another while the rest wait.
 function openLevelUp() {
+  if (!G.lvQueue || !G.lvQueue.length) G.lvQueue = G.local ? G.players.filter(p => !p.down) : [ME];
+  if (!G.lvQueue.length) G.lvQueue = [ME];
+  G.chooser = G.lvQueue.shift();
   setState('levelup');
   Snd.play('levelup');
   $('xpbar').classList.add('flash');
-  G.choices = rollChoices(Math.random() < 0.2 ? 4 : 3);
-  renderChoices();
+  G.choices = withPlayer(G.chooser, () => rollChoices(Math.random() < 0.2 ? 4 : 3));
+  setWho('luWho', G.chooser, G.lvQueue.length ? ' chooses · the others wait' : ' chooses');
+  withPlayer(G.chooser, renderChoices);
 }
 function renderChoices() {
   const box = $('luCards');
@@ -2283,7 +2349,7 @@ function renderChoices() {
       <div><div class="name">${info.name}</div><div class="lv ${info.cls || ''}">${info.lv}</div></div></div>
       <div class="desc">${info.desc}</div>
       ${info.hint ? `<div class="hint"><img src="${ICON_URL[info.hintIcon]}" alt="">${info.hint}</div>` : ''}`;
-    b.onclick = () => pickChoice(i);
+    b.onclick = () => { if (menuClickOk()) pickChoice(i); };
     b.onmouseenter = () => { if (luSel !== i) { luSel = i; markSel(); Snd.play('hover'); } };
     box.appendChild(b);
   });
@@ -2296,10 +2362,12 @@ function pickChoice(i) {
   const c = G.choices[i];
   if (!c || state !== 'levelup') return;
   Snd.play('select');
-  applyChoice(c);
+  withPlayer(G.chooser || P, () => applyChoice(c));
+  refreshSlots();
   finishLevel();
 }
 function finishLevel() {
+  if (G.lvQueue && G.lvQueue.length) { openLevelUp(); return; }   // the next player's upgrade for this same level
   G.pending--;
   if (G.pending > 0) { openLevelUp(); return; }
   $('xpbar').classList.remove('flash');
@@ -2307,12 +2375,12 @@ function finishLevel() {
   levelShock();
 }
 $('btnReroll').onclick = () => {
-  if (G.rerolls <= 0) return;
+  if (G.rerolls <= 0 || !menuClickOk()) return;
   G.rerolls--; Snd.play('select');
-  G.choices = rollChoices(G.choices.length);
-  renderChoices();
+  G.choices = withPlayer(G.chooser || P, () => rollChoices(G.choices.length));
+  withPlayer(G.chooser || P, renderChoices);
 };
-$('btnSkip').onclick = () => { Snd.play('select'); finishLevel(); };
+$('btnSkip').onclick = () => { if (!menuClickOk()) return; Snd.play('select'); finishLevel(); };
 
 /* ---------- Chest ---------- */
 const CHEST_URL = (() => {
@@ -2320,9 +2388,11 @@ const CHEST_URL = (() => {
   c.getContext('2d').drawImage(SPR.chest.c, 0, 0);
   return c.toDataURL();
 })();
-function openChest(isBoss, note) {
+// A chest belongs to the player it is opened for: what comes out of it goes to them alone
+function openChest(isBoss, note, owner = P) {
   setState('chest');
-  G.chest = { boss: !!isBoss, opened: false, note };
+  G.chest = { boss: !!isBoss, opened: false, note, owner };
+  setWho('chestWho', owner, "'s chest");
   $('chestImg').src = CHEST_URL;
   $('chestList').innerHTML = '';
   $('chest').classList.remove('open', 'shake');
@@ -2330,9 +2400,19 @@ function openChest(isBoss, note) {
   $('btnChest').disabled = false;
   Snd.play('pickup');
 }
+// One chest for each of the given players, one after another
+function openChestsFor(players, isBoss, note) {
+  G.chestQueue = players.slice(1);
+  openChest(isBoss, note, players[0]);
+}
 function revealChest() {
   const ch = G.chest;
-  if (ch.opened) { setState('play'); return; }
+  if (ch.opened) {
+    const next = G.chestQueue && G.chestQueue.shift();
+    if (next) openChest(ch.boss, null, next);
+    else setState('play');
+    return;
+  }
   ch.opened = true;
   $('btnChest').disabled = true;
   $('chest').classList.add('shake');
@@ -2341,25 +2421,28 @@ function revealChest() {
     $('chest').classList.remove('shake');
     $('chest').classList.add('open');
     const rows = [];
-    const evoW = G.weapons.find(canEvolve);
-    if (evoW) {
-      evoW.evo = true; evoW.level = WEAPON_MAX(evoW.id);
-      const d = WEAPONS[evoW.id];
-      rows.push({ icon: evoW.id, name: d.evoName, lv: `Evolved from ${d.name}. ${d.evoDesc}`, evo: true });
-      Snd.play('evolve');
-      recalc(); refreshSlots();
-    }
-    const total = ch.boss ? 3 : Math.random() < 0.25 + 0.05 * P.luck ? 3 : 1;
-    while (rows.length < total) {
-      const c = rollChoices(1, true)[0];
-      if (!c) break;
-      const info = choiceInfo(c);
-      applyChoice(c);
-      rows.push({ icon: info.icon, name: info.name, lv: info.lv + ' · ' + info.desc });
-    }
-    const gold = Math.round(rand(15, 40) * (ch.boss ? 3 : 1) * P.greed);
-    G.gold += gold;
-    rows.push({ icon: 'gold', name: `${gold} gold`, lv: 'Spend it at shrines, or at the Altar of Embers' });
+    withPlayer(ch.owner || P, () => {
+      const evoW = G.weapons.find(canEvolve);
+      if (evoW) {
+        evoW.evo = true; evoW.level = WEAPON_MAX(evoW.id);
+        const d = WEAPONS[evoW.id];
+        rows.push({ icon: evoW.id, name: d.evoName, lv: `Evolved from ${d.name}. ${d.evoDesc}`, evo: true });
+        Snd.play('evolve');
+        recalc();
+      }
+      const total = ch.boss ? 3 : Math.random() < 0.25 + 0.05 * P.luck ? 3 : 1;
+      while (rows.length < total) {
+        const c = rollChoices(1, true)[0];
+        if (!c) break;
+        const info = choiceInfo(c);
+        applyChoice(c);
+        rows.push({ icon: info.icon, name: info.name, lv: info.lv + ' · ' + info.desc });
+      }
+      const gold = Math.round(rand(15, 40) * (ch.boss ? 3 : 1) * P.greed);
+      G.gold += gold;
+      rows.push({ icon: 'gold', name: `${gold} gold`, lv: 'Spend it at shrines, or at the Altar of Embers' });
+    });
+    refreshSlots();
     if (ch.note) rows.push(ch.note);
     $('chestList').innerHTML = rows.map((r, i) => `<div class="rew${r.evo ? ' evo' : ''}" style="animation-delay:${0.15 + i * 0.25}s">
       <div class="ic"><img src="${ICON_URL[r.icon]}" alt=""></div><div><div class="name">${r.name}</div><div class="lv">${r.lv}</div></div></div>`).join('');
@@ -2367,7 +2450,7 @@ function revealChest() {
     setTimeout(() => { $('btnChest').disabled = false; }, 300 + rows.length * 250);
   }, 750);
 }
-$('btnChest').onclick = revealChest;
+$('btnChest').onclick = () => { if (menuClickOk()) revealChest(); };
 
 /* ---------- Pause ---------- */
 function openPause() {
@@ -2491,6 +2574,7 @@ function onKey(e) {
   if (Mods.call('key', e)) return;
   if (e.code === 'KeyM') { save.muted = !save.muted; persist(); applyVolume(); return; }
   if (state === 'play' && e.code === 'KeyE') { interact(); return; }
+  if (state === 'play' && !e.repeat && ROLL_KEYS.includes(e.code) && ME) { ME.rollReq = 0.15; return; }
   if (state === 'shrine') {
     if (e.code === 'Escape') leaveShrine();
     else if (e.code === 'Enter' || e.code === 'Space' || e.code === 'KeyE') { e.preventDefault(); pullShrine(); }

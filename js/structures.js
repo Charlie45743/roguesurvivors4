@@ -280,8 +280,7 @@ function worldInteract(pl) {
   return true;
 }
 function goDungeon(pl, theme, st) {
-  if (G.local) { banner('Interiors are solo for now', 'Local co-op stays on the night map', '#a59cc4'); return; }
-  if (pl !== ME) { Mods.call('remoteCrypt', pl, theme, st); return; }
+  if (!G.local && pl !== ME) { Mods.call('remoteCrypt', pl, theme, st); return; }   // online: the partner goes below on their own screen
   enterCrypt(null, theme, st);
 }
 
@@ -520,7 +519,7 @@ function fortuneModal(s, pl) {
 }
 
 /* ---------- World events ---------- */
-const EVENT_KINDS = ['meteor', 'bloodmoon', 'caravan', 'hunt', 'star', 'siege'];
+const EVENT_KINDS = ['meteor', 'bloodmoon', 'caravan', 'star', 'siege'];
 function startEvent() {
   const opts = EVENT_KINDS.filter(k => k !== G.lastEv && (k !== 'siege' || findVillage()));
   const kind = pick(opts);
@@ -531,13 +530,6 @@ function startEvent() {
     case 'meteor': Object.assign(ev, at(250, 340), { fall: 1.6, dur: 50, mine: 0, name: 'Meteor' }); banner('A meteor falls', 'Mine the crater before the horde claims it', '#ffd35a'); break;
     case 'bloodmoon': Object.assign(ev, { dur: 40, name: 'Blood Moon' }); G.buffs.bloodmoon = 40; G.spawnMul = 2.5; G.darkMul = 1.3; banner('Blood Moon', 'The horde swells. Every kill is worth double', '#d8354a'); Snd.play('warn'); break;
     case 'caravan': Object.assign(ev, at(180, 240), { dur: 60, hp: 300, maxHp: 300, alive: true, name: 'Caravan', raidT: 3 }); ev.npc = makeNpc('merchant', ev.x + 18, ev.y + 6); banner('A merchant caravan', 'Trade, and keep it alive for 60 seconds', '#ffd35a'); break;
-    case 'hunt': {
-      const p = at(650, 750);
-      ev.dur = 120; ev.name = 'The Hunt';
-      ev.boss = makeBoss('stag', p.x, p.y, { minor: true, hpMul: 1 + G.t / 300, onDeath: e => { dropRelic('stagHeart', e.x, e.y); dropAt('chest', e.x + 14, e.y, { boss: true }); endEvent('The beast is slain'); } });
-      banner('The Hunt', 'A Dread Stag stalks the night. Follow the compass', '#8ff0ff'); Snd.play('warn');
-      break;
-    }
     case 'star': Object.assign(ev, at(350, 470), { fall: 1.2, dur: 30, name: 'Falling Star' }); banner('A falling star', 'Reach it within 30 seconds', '#fff3b0'); break;
     case 'siege': {
       const v = findVillage();
@@ -594,7 +586,6 @@ function updateEvent(dt) {
       }
       if (ev.hp <= 0) { ev.alive = false; burst(ev.x, ev.y, '#e8742c', 40, 100); endEvent('The caravan is lost', '#d8354a'); return; }
       break;
-    case 'hunt': if (ev.boss.dead) return; break;
     case 'star':
       if (pastFall && G.players.some(pl => !pl.down && Math.hypot(pl.x - ev.x, pl.y - ev.y) < 18)) {
         const pl = nearestPlayer(ev.x, ev.y), keep = P; P = pl;
@@ -627,8 +618,7 @@ function updateEvent(dt) {
       const alive = ev.folk.filter(f => !f.dead).length;
       if (alive >= 3) { dropAt('chest', ev.x, ev.y + 20, { boss: true }); G.gold += 80; endEvent(`The village is saved (${alive}/5)`, '#ffd35a'); }
       else { ev.v.ruined = true; endEvent('The village has fallen', '#d8354a'); }
-    } else if (ev.kind === 'hunt') { if (!ev.boss.dead) ev.boss.dead = true; endEvent('The beast slips away'); }
-    else if (ev.kind === 'bloodmoon') endEvent('The blood moon sets', '#a59cc4');
+    } else if (ev.kind === 'bloodmoon') endEvent('The blood moon sets', '#a59cc4');
     else endEvent(ev.kind === 'star' ? 'The star burns out' : 'The crater cools');
   }
 }
@@ -797,10 +787,6 @@ Mods.add({
   pointers(list) {
     const ev = G.ev;
     if (ev && ev.x !== undefined && !onScreen(ev.x, ev.y, 10)) list.push({ x: ev.x, y: ev.y, pcolor: '#fff3b0', picon: ev.kind === 'caravan' ? BUILD.barrel : ICON.star });
-    if (ev && ev.kind === 'hunt' && !ev.boss.dead && !onScreen(ev.boss.x, ev.boss.y, 10)) {
-      const wob = Math.sin(performance.now() / 900) * 160;
-      list.push({ x: ev.boss.x + wob, y: ev.boss.y - wob * 0.6, pcolor: '#8ff0ff', picon: ICON.skull });
-    }
     if (!noStructs()) for (const st of structsNear(ME.x, ME.y)) {
       if (st.type === 'mansion' && st.active && !G.keys?.[st.id] && st.keyAt && Math.hypot(ME.x - st.x, ME.y - st.y) < 260 && !onScreen(st.keyAt.x, st.keyAt.y, 10)) list.push({ x: st.keyAt.x, y: st.keyAt.y, pcolor: '#ffd35a', picon: BUILD.key });
     }

@@ -199,9 +199,6 @@ SPR.gravekeeper = (() => {
   rows = patch(rows, [...column(17, 0, 15, 'k'), [16, 13, '0WW0'], [16, 14, '0WW0'], [16, 15, '.00.']]);
   return [makeSprite(rows, { s: 'l', w: '2', W: '3', y: 'G' })];
 })();
-SPR.stag = [MX(['0.......0...', '0.0.....0..0', '.000....0.00', '..00.....00.', '...00...00..', '....00000...', '.......00000', '......0wwwww', '.....0wWWWww', '.....0w0yWWw', '.....0wwWWww', '......0wwwww', '.......0wwww', '..000000WWww', '.0wwwwwwWWWw',
-  '0wwwwwwwwwww', '0wWwwwwwwwww', '0wwwwwwwwwww', '.0ww0....0ww', '.0w0......0w', '.00.......00'], { w: 'k', W: 'K', y: 'c' })];
-
 /* ---------- Buildings (painted with code, pixel by pixel) ---------- */
 function paint(w, h, fn) {
   const c = document.createElement('canvas'); c.width = w; c.height = h;

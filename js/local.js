@@ -9,13 +9,15 @@ SCREENS.push('localco');
 const KB_DEVS = [
   { kind: 'kb', name: 'WASD', up: 'KeyW', down: 'KeyS', left: 'KeyA', right: 'KeyD', act: 'KeyE', back: 'KeyQ', hint: 'E',
     nav: 'A D change · W S options · E ready · Q leave',
-    controls: [['Move', 'W A S D'], ['Interact', 'E'], ['Level-up menu', 'A D to browse · E to pick']], leave: 'Q' },
+    cry: { left: ['KeyA'], right: ['KeyD'], down: ['KeyS'], jump: ['KeyW', 'Space'], attack: ['KeyE', 'KeyJ'], roll: ['KeyQ', 'ShiftLeft'] },
+    controls: [['Move', 'W A S D'], ['Interact', 'E'], ['Level-up menu', 'A D to browse · E to pick'], ['Crypts', 'W jump · E attack · Q roll']], leave: 'Q' },
   { kind: 'kb', name: 'Arrow keys', up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight', act: 'Slash', back: 'Period', hint: '/',
     nav: 'Left Right change · Up Down options · / ready · Period leave',
-    controls: [['Move', 'Arrow keys'], ['Interact', '/'], ['Level-up menu', 'Left Right to browse · / to pick']], leave: 'Period key' },
+    cry: { left: ['ArrowLeft'], right: ['ArrowRight'], down: ['ArrowDown'], jump: ['ArrowUp'], attack: ['Slash', 'KeyX'], roll: ['Period', 'ShiftRight'] },
+    controls: [['Move', 'Arrow keys'], ['Interact', '/'], ['Level-up menu', 'Left Right to browse · / to pick'], ['Crypts', 'Up jump · / attack · Period roll']], leave: 'Period key' },
 ];
 const MOUSE_DEV = { kind: 'mouse', name: 'Mouse', hint: 'R-CLICK', nav: 'Click the arrows and buttons',
-  controls: [['Move', 'Hold left click and drag'], ['Interact', 'Right click'], ['Level-up menu', 'Click a card, or hover and right click']], leave: 'Leave button' };
+  controls: [['Move', 'Hold left click and drag'], ['Interact', 'Right click'], ['Level-up menu', 'Click a card, or hover and right click'], ['Crypts', 'Drag to move · Roll, Jump and Hit buttons']], leave: 'Leave button' };
 const LOCAL_MENU_STATES = ['levelup', 'chest', 'shrine'];
 const MAX_SEATS = 4;
 const READY_DELAY = 1.2;                         // seconds between the last player readying up and the night starting
@@ -29,7 +31,7 @@ let promptT = 0, promptIdx = 0;
 let lastLaunch = null;                            // what the current run started with, so "Rise again" can repeat it
 
 const asPlayer = (pl, fn) => { const keep = P; P = pl; try { return fn(); } finally { P = keep; } };
-const fakeKey = code => ({ code, key: code, preventDefault() { /* synthetic */ } });
+const fakeKey = code => ({ code, key: code, synthetic: true, preventDefault() { /* synthetic */ } });
 const statusMsg = t => { $('localStatus').textContent = t; };
 const localChars = () => CHARS.filter(c => !c.cost || save.unlocked[c.id]).map(c => c.id);
 const portraitFor = id => portraits[id] || (portraits[id] = charFrames(id)[0].c.toDataURL());
@@ -53,7 +55,7 @@ function padDevice(gp) {
   const hint = ps ? 'X' : 'A';
   return { kind: 'pad', pad: gp.index, name: ps ? 'PlayStation controller' : xbox ? 'Xbox controller' : 'Controller ' + (gp.index + 1), hint,
     nav: `D-pad change · ${hint} ready · ${ps ? 'Circle' : 'B'} leave`,
-    controls: [['Move', 'Left stick or D-pad'], ['Interact', hint], ['Level-up menu', `D-pad to browse · ${hint} to pick`]], leave: ps ? 'Circle' : 'B' };
+    controls: [['Move', 'Left stick or D-pad'], ['Interact', hint], ['Level-up menu', `D-pad to browse · ${hint} to pick`], ['Crypts', `${hint} attack · ${ps ? 'Circle' : 'B'} roll · ${ps ? 'Square' : 'X'} or Up jump`]], leave: ps ? 'Circle' : 'B' };
 }
 function firstFreeChar() {
   const list = localChars(), taken = new Set(lobby.map(s => s.ch));
@@ -249,9 +251,15 @@ function devVec(dev) {
 // Interact for one player. The first player uses the normal path; the others use the same flow as them.
 function interactFor(pl) {
   if (pl === ME) { interact(); return; }
-  asPlayer(pl, () => Mods.first('interact', pl));
+  if (asPlayer(pl, () => Mods.first('interact', pl))) return;
+  const c = G.nearCrypt;
+  if (c && Math.hypot(pl.x - c.x, pl.y + 6 - c.y) < 24) enterCrypt(c);   // any player can lead the party down
 }
-const menuAct = pl => asPlayer(pl, () => onKey(fakeKey('Enter')));
+// A menu belongs to one player at a time: whoever is choosing an upgrade, or whose chest it is. Everyone else is frozen out of it.
+const menuOwner = () => !G || !G.local ? null : state === 'levelup' ? G.chooser : state === 'chest' && G.chest ? G.chest.owner : null;
+const menuAct = pl => { const o = menuOwner(); if (o && o !== pl) return; asPlayer(pl, () => onKey(fakeKey('Enter'))); };
+// A click on a menu counts when nobody holds the mouse, or when it is the mouse player's turn
+const menuClickOk = () => { const o = menuOwner(), m = mousePlayer(); return !o || !m || o === m; };
 
 // Controllers: a button joins and readies in the lobby, and acts in the run
 function padDirs(gp) {
@@ -279,7 +287,7 @@ function pollPads() {
     if (!G || !G.local) continue;
     const pl = G.players.find(p => p.dev && p.dev.kind === 'pad' && p.dev.pad === gp.index);
     if (!pl) continue;
-    if (state === 'levelup' && stepX) onKey(fakeKey(stepX < 0 ? 'ArrowLeft' : 'ArrowRight'));
+    if (state === 'levelup' && stepX && pl === G.chooser) onKey(fakeKey(stepX < 0 ? 'ArrowLeft' : 'ArrowRight'));
     if (!pressA) continue;
     if (state === 'play') interactFor(pl);
     else if (LOCAL_MENU_STATES.includes(state)) menuAct(pl);
@@ -301,6 +309,12 @@ function lobbyKey(e) {
 function localKey(e) {
   if (state === 'localco') return lobbyKey(e);
   if (!G || !G.local) return false;
+  const owner = menuOwner();
+  if (owner && !e.synthetic && !['KeyM', 'Escape', 'KeyP'].includes(e.code)) {
+    // while one player picks, the other players' keys do nothing
+    const dev = KB_DEVS.find(d => [d.up, d.down, d.left, d.right, d.act, d.back].includes(e.code));
+    if (dev ? dev !== owner.dev : G.players.length > 1) { e.preventDefault(); return true; }
+  }
   const pl = G.players.find(p => p.dev && p.dev.act === e.code);
   if (!pl) return false;
   e.preventDefault();
@@ -345,12 +359,12 @@ document.addEventListener('click', () => { if (clickSwap) { clickSwap = false; P
 
 /* ---------- Split screen ---------- */
 // Draws the night once per player into its own part of the canvas. W and H shrink to that part while it draws.
-function renderSplit(draw) {
-  const full = { W, H }, n = G.players.length, hw = Math.floor(W / 2), hh = Math.floor(H / 2);
+function renderSplit(draw, list = G.players) {
+  const full = { W, H }, n = list.length, hw = Math.floor(W / 2), hh = Math.floor(H / 2);
   const rects = n === 2 ? [[0, 0, hw, H], [hw, 0, W - hw, H]]
     : [[0, 0, hw, hh], [hw, 0, W - hw, hh], [0, hh, hw, H - hh], [hw, hh, W - hw, H - hh]];
   ctx.fillStyle = '#05040c'; ctx.fillRect(0, 0, W, H);
-  G.players.forEach((pl, i) => {
+  list.forEach((pl, i) => {
     const [x, y, w, h] = rects[i];
     ctx.save();
     ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip(); ctx.translate(x, y);
@@ -362,6 +376,46 @@ function renderSplit(draw) {
   ctx.fillStyle = '#0b0a12';
   ctx.fillRect(hw - 1, 0, 2, H);
   if (n > 2) ctx.fillRect(0, hh - 1, W, 2);
+}
+
+/* ---------- Crypts: the whole party goes below ---------- */
+const CRYPT_ACTS = ['left', 'right', 'down', 'jump', 'attack', 'roll'];
+// What one device is holding right now, as {left, right, down, jump, attack, roll}
+function cryptHold(dev) {
+  const h = {};
+  if (!dev || dev.kind === 'mouse') { for (const a of CRYPT_ACTS) h[a] = pointerHeld(a); return h; }
+  if (dev.kind === 'pad') {
+    const gp = (navigator.getGamepads ? navigator.getGamepads() : [])[dev.pad];
+    if (!gp) return h;
+    const b = i => !!(gp.buttons[i] && gp.buttons[i].pressed), ax = gp.axes[0] || 0, ay = gp.axes[1] || 0;
+    h.left = ax < -0.4 || b(14); h.right = ax > 0.4 || b(15); h.down = ay > 0.6 || b(13);
+    h.jump = b(2) || b(3) || b(12) || ay < -0.6; h.attack = b(0); h.roll = b(1);
+    return h;
+  }
+  for (const a of CRYPT_ACTS) h[a] = dev.cry[a].some(k => keys[k]);
+  return h;
+}
+// Once a frame: read every body's device and turn fresh presses into press flags (the mouse's buttons count taps)
+function refreshCryptInputs() {
+  for (const b of D.bodies) {
+    const h = cryptHold(b.pl.dev), prev = b.hold || {};
+    b.press = b.press || {};
+    for (const a of CRYPT_ACTS) if (h[a] && !prev[a]) b.press[a] = true;
+    if (!b.pl.dev || b.pl.dev.kind === 'mouse') for (const a of CRYPT_ACTS) if (ptrPress[a]) b.press[a] = true;
+    b.hold = h;
+  }
+  for (const a in ptrPress) ptrPress[a] = false;
+}
+// One pane per player, each following its own body. Anyone who fell below watches whoever still stands.
+function renderCryptViews() {
+  if (!(G.local && D.bodies && D.bodies.length > 1)) { renderCrypt(); return; }
+  renderSplit(() => {
+    const mine = D.bodies.find(b => b.pl === P) || D.bodies[0];
+    DP = mine.out ? D.bodies.find(b => !b.out) || mine : mine;
+    renderCrypt();
+    if (mine.out) drawText(ctx, 'FALLEN', W / 2, 14, '#d8354a');
+  }, D.bodies.map(b => b.pl));
+  DP = D.bodies[0];
 }
 
 /* ---------- Menu wiring ---------- */
