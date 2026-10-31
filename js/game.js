@@ -334,7 +334,7 @@ function recalc() {
   P.maxHp = maxHp; P.hp = Math.min(P.hp, P.maxHp);
   P.regen = 0.3 * lv('vitality');
   P.magnet = 32 * (1 + 0.35 * lv('magnet') + 0.15 * (sh.magnet || 0) + (m.magnet || 0));
-  P.growth = 1 + 0.1 * lv('growth') + 0.05 * (sh.growth || 0);
+  P.growth = 1.4 + 0.1 * lv('growth') + 0.05 * (sh.growth || 0);
   P.armor = lv('armor') + (m.armor || 0);
   P.luck = lv('luck') + (sh.fate || 0) + (m.luck || 0);
   P.blood = lv('blood');
@@ -485,11 +485,11 @@ function runEvent(ev) {
 
 function director(dt) {
   const minute = G.t / 60, m = Math.min(WAVES.length - 1, Math.floor(minute));
-  G.hpMul = 1 + minute * 0.22 + minute * minute * 0.016;
+  G.hpMul = 1 + minute * 0.16 + minute * minute * 0.011;
   while (G.evIdx < EVENTS.length && G.t >= EVENTS[G.evIdx].t) runEvent(EVENTS[G.evIdx++]);
   if (G.won) return;
   const wave = WAVES[m], cap = Math.min(650, 110 + m * 38);
-  G.spawnAcc += wave.rate * (G.boss ? 0.45 : 1) * (G.spawnMul || 1) * dt;
+  G.spawnAcc += wave.rate * 0.8 * (G.boss ? 0.45 : 1) * (G.spawnMul || 1) * dt;
   while (G.spawnAcc >= 1) {
     G.spawnAcc--;
     if (G.mobs < cap) { const [x, y] = edgePos(); spawnEnemy(weighted(wave.types), x, y); }
