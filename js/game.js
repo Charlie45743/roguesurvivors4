@@ -2505,6 +2505,7 @@ function gameOver(won) {
   save.gold += earned;
   G.earnedGold = earned;
   save.best = Math.max(save.best || 0, Math.min(G.t, RUN_LENGTH));
+  save.runs = [...(save.runs || []), { ch: G.ch.id, t: Math.floor(Math.min(G.t, RUN_LENGTH)), k: G.kills, lv: G.level, w: !!won }].sort((a, b) => b.t - a.t || b.k - a.k).slice(0, 10);
   persist();
   setState('over');
   $('overT').textContent = won ? 'Dawn breaks' : 'You fell';

@@ -176,6 +176,7 @@ function renderLobby() {
   const open = lobby.length < MAX_SEATS
     ? `<${seatOf(MOUSE_DEV) ? 'div' : 'button'} class="pane open${lobby.length ? '' : ' alone'}" data-do="join"><div class="phead"><b>${lobby.length ? 'Player ' + (lobby.length + 1) : 'Local co-op'}</b></div><div class="joinprompt"></div></${seatOf(MOUSE_DEV) ? 'div' : 'button'}>`
     : '';
+  box.dataset.n = lobby.length + (lobby.length < MAX_SEATS ? 1 : 0);
   box.innerHTML = lobby.map(paneHtml).join('') + open;
   box.querySelectorAll('.joinprompt').forEach(showPrompt);
   statusMsg(!lobby.length ? 'Everyone plays on this screen, up to four at once.'
@@ -297,7 +298,7 @@ function pollPads() {
 
 // Keyboard: in the lobby a movement or action key joins that set and then drives its panel; in the run it acts for its player
 function lobbyKey(e) {
-  if (e.code === 'Escape') { openMenu(); return true; }
+  if (e.code === 'Escape') { openCoopMenu(); return true; }
   const dev = KB_DEVS.find(d => [d.up, d.down, d.left, d.right, d.act, d.back].includes(e.code));
   if (!dev) return false;
   e.preventDefault();
