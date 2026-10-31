@@ -66,6 +66,14 @@ addEventListener('keydown', e => {
   for (const a in ACT) if (ACT[a].includes(e.code) && !e.repeat) dpress[a] = true;
   if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
 });
+// With the mouse, a quick click swings the sword; holding and dragging steers (see pointerHeld)
+let tap = null;
+cv.addEventListener('pointerdown', e => { if (state === 'dungeon' && e.pointerType === 'mouse' && e.button === 0) tap = { t: performance.now(), x: e.clientX, y: e.clientY, id: e.pointerId }; });
+addEventListener('pointerup', e => {
+  if (!tap || e.pointerId !== tap.id) return;
+  if (state === 'dungeon' && performance.now() - tap.t < 300 && Math.hypot(e.clientX - tap.x, e.clientY - tap.y) < 12) { dpress.attack = true; ptrPress.attack = true; }
+  tap = null;
+});
 document.querySelectorAll('#dpad [data-act]').forEach(b => {
   const a = b.dataset.act, up = () => { touchHeld[a] = false; };
   b.addEventListener('pointerdown', e => { e.preventDefault(); if (state === 'dungeon') { dpress[a] = true; ptrPress[a] = true; } touchHeld[a] = true; });

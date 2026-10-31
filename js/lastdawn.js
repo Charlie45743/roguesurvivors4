@@ -251,9 +251,10 @@ Mods.add({
       }
     }
     // Bram mends barricades
-    const bram = allyList().find(a => a.key === 'bram' && !a.down);
-    if (bram) for (const p of Scn.pieces) if (p.tgt && !p.fallen && p.hp < p.maxHp && Math.hypot(p.x - bram.x, p.y - bram.y) < 44) {
-      p.hp = Math.min(p.maxHp, p.hp + 16 * dt);
+    // Bram, Orin and anyone you set to repair mend walls and engines they stand beside
+    const menders = [...allyList().filter(a => (a.key === 'bram' || a.key === 'orin' || a.repairs) && !a.down), ...Cine.actors.filter(a => a.repair && a.hp > 0)];
+    for (const m of menders) for (const p of Scn.pieces) if (p.tgt && !p.fallen && p.hp < p.maxHp && Math.hypot(p.x - m.x, p.y - m.y) < 48) {
+      p.hp = Math.min(p.maxHp, p.hp + 14 * dt);
       if (Math.random() < dt * 8) addPart(p.x + rand(-10, 10), p.y - rand(2, 10), rand(-20, 20), rand(-40, -10), 0.4, pick(['#ffd35a', '#e8742c']), 1, 120);
     }
     // an Orin or a Bram near something that needs mending also keeps the engine going (see ldchapters)
@@ -475,6 +476,6 @@ function* rollCredits(c) {
   const skip = () => { closed = true; };
   el.addEventListener('pointerdown', skip, { once: true });
   const t0 = performance.now();
-  yield c.until(() => closed || performance.now() - t0 > 47000);
+  yield c.until(() => closed || LDFAST || performance.now() - t0 > 47000);
   el.classList.add('hidden');
 }

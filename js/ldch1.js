@@ -213,11 +213,22 @@ const roadPlay = function* (c) {
   const R = G.ld.place, L = LDS();
   c.objective('Follow the road east'); c.point(3700, 0);
   const strike = (types, n, ahead = 320) => c.wave(types, n, [[ME.x + ahead, rand(-90, 90)], [ME.x + ahead, rand(-90, 90)]], { gap: 0.5, ai: false });
+  // Ghouls and skeletons are slower than you, so a fight can be outrun. Once the party is well past it the stragglers are dismissed,
+  // so the road never waits on foes that are left behind.
+  const clearOrLeave = max => {
+    const from = ME.x;
+    return c.until(() => {
+      if (LDFAST) { Camp.timers.forEach(t => (t.t = 0)); for (const e of G.enemies) if (e.siege && !e.dead && !e.boss) e.dead = true; }
+      const left = G.players.every(p => p.x > from + 500);
+      if (left) for (const e of G.enemies) if (e.siege && !e.dead && !e.boss) { e.dead = true; burst(e.x, e.y, '#a59cc4', 6, 50); }
+      return left || (!(Camp.pend > 0) && foesAlive() <= max);
+    });
+  };
   // the forest
   yield c.reachX(380);
   c.bark('kael', 'You know, I used to like forests.', 3.4); yield c.wait(3.6);
   c.bark('mira', 'The trees are thinner here. They were cut down in a hurry.', 3.8); yield c.wait(4);
-  strike(['skel', 'ghoul'], 6); yield c.clear(1);
+  strike(['skel', 'ghoul'], 6); yield clearOrLeave(1);
   // the burned village
   yield c.reachX(840);
   yield* mini(c, { x: 980, y: -10 }, [
@@ -225,7 +236,7 @@ const roadPlay = function* (c) {
     ['kael', 'Everything here looks dead.'],
     ['mira', 'That\'s what worries me.'],
   ]);
-  strike({ ghoul: 3, skel: 2, bat: 3 }, 10); yield c.clear(1);
+  strike({ ghoul: 3, skel: 2, bat: 3 }, 10); yield clearOrLeave(1);
   c.bark('bram', 'Someone lived here. There is a child\'s boot by the door.', 4); yield c.wait(4.4);
   // the abandoned road
   yield c.reachX(1500);
@@ -236,7 +247,7 @@ const roadPlay = function* (c) {
   c.bark('elara', 'We run.', 2); yield c.wait(2);
   c.bark('kael', '...That\'s not a plan.', 2.4); yield c.wait(2.6);
   c.bark('elara', 'It is tonight.', 2.6);
-  strike({ wraith: 2, skel: 3, ghoul: 3 }, 12); yield c.clear(1);
+  strike({ wraith: 2, skel: 3, ghoul: 3 }, 12); yield clearOrLeave(1);
   c.bark('bram', 'Keep your voices down. Sound carries on a dead road.', 3.6);
   // the camp: someone is being attacked
   yield c.reachX(2200);
@@ -280,7 +291,7 @@ const roadPlay = function* (c) {
     c.objective('Follow the road east'); c.point(3700, 0);
     // the ruined farm
     yield c.reachX(3000);
-    strike({ ghoul: 3, wraith: 2, skel: 2 }, 12); c.bark('kael', 'Hay, fences, broken windows. I have seen better farms in nightmares.', 4); yield c.clear(1);
+    strike({ ghoul: 3, wraith: 2, skel: 2 }, 12); c.bark('kael', 'Hay, fences, broken windows. I have seen better farms in nightmares.', 4); yield clearOrLeave(1);
   } else {
     L.choices.abandoned = true; c.rel('mira', -2); c.rel('kael', -1);
     for (const e of G.enemies) if (e.siege) e.siege = false;

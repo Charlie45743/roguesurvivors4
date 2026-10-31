@@ -8,7 +8,7 @@
 
 /* ---------- People ---------- */
 const recolorAll = (fr, map) => fr.map(f => recolor(f, map));
-CHAR_ART.elara = { ...CHAR_ART.wren, swap: { P: '3', p: '2', c: 'R' } };
+CHAR_ART.elara = { ...CHAR_ART.wren, swap: { P: '4', p: '3', c: 'R' } };
 NPC_SPR.kael = recolorAll(NPC_SPR.hunter, { '#4fa04a': '#c08a3a', '#1f4d33': '#6a4a22' });
 NPC_SPR.mira = recolorAll(NPC_SPR.priest, { '#f2eee6': '#8ff0ff', '#b5b2c4': '#3f8ee0' });
 NPC_SPR.bram = recolorAll(NPC_SPR.smith, { '#5a3a28': '#7a1a2a', '#6d6a7c': '#a59cc4' });
@@ -80,7 +80,8 @@ function campTick(dt) {
       if (!done) return;
       Camp.wait = null; dt = 0;
     }
-    const r = Camp.gen.next();
+    const gen = Camp.gen, r = gen.next();
+    if (Camp.gen !== gen) return;   // the script started another campaign (next chapter): its runner is already set up
     if (r.done) { Camp.gen = null; const f = Camp.onDone; Camp.onDone = null; if (f) f(); return; }
     Camp.wait = norm(r.value);
   }
@@ -207,6 +208,7 @@ function drawPiece2(p, now) {
 
 /* ---------- Tweens ---------- */
 function tween(o, k, to, dur, e = 'inout') {
+  for (const t of Cine.tw) if (t.o === o && t.k === k) t.done = true;   // a newer tween takes over; whoever waited on the old one is released
   Cine.tw = Cine.tw.filter(t => !(t.o === o && t.k === k));
   if (dur <= 0 || Camp.skipping) { o[k] = to; return tick(() => true); }
   const t = { o, k, from: o[k], to, t: 0, dur, e: ease[e] || ease.inout, done: false };

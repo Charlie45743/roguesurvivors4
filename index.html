@@ -415,7 +415,7 @@ button.pane.open:hover { opacity: 1; background: var(--panel2); }
   <button id="pausebtn" class="btn ghost">II</button>
 </div>
 <button id="shrinePrompt" class="btn shrine-prompt hidden">E &middot; Make an offering</button>
-<div id="dhud" class="hidden"><div id="dTitle"></div><div id="dInfo"></div><div class="dkeys">A / D move &middot; Space jump (twice) &middot; J attack &middot; Shift roll &middot; S + Space drop through planks &middot; or hold the mouse to steer and use the buttons</div></div>
+<div id="dhud" class="hidden"><div id="dTitle"></div><div id="dInfo"></div><div class="dkeys">A / D move &middot; Space jump (twice) &middot; J or click attack &middot; Shift roll &middot; S + Space drop through planks &middot; or hold and drag the mouse to steer</div></div>
 <div id="dpad" class="hidden"><button class="btn ghost" data-act="roll">Roll</button><button class="btn ghost" data-act="jump">Jump</button><button class="btn" data-act="attack">Hit</button></div>
 <div id="fade"></div>
 <div id="titlecard"></div>
@@ -552,33 +552,35 @@ button.pane.open:hover { opacity: 1; background: var(--panel2); }
 window.__errs = [];
 window.addEventListener('error', e => { window.__errs.push(e.message + ':' + e.lineno); document.getElementById('err').textContent += (e.message + ' @' + (e.filename || '').split('/').pop() + ':' + e.lineno + '\n'); });
 </script>
-<script src="js/sprites.js?v=6"></script>
-<script src="js/audio.js?v=6"></script>
-<script src="js/data.js?v=6"></script>
-<script src="js/game.js?v=6"></script>
-<script src="js/art.js?v=6"></script>
-<script src="js/dungeon.js?v=6"></script>
-<script src="js/dungeon2.js?v=6"></script>
-<script src="js/bosses.js?v=6"></script>
-<script src="js/bossfx.js?v=6"></script>
-<script src="js/bossart.js?v=6"></script>
-<script src="js/structures.js?v=6"></script>
-<script src="js/powerups.js?v=6"></script>
-<script src="js/towns.js?v=6"></script>
-<script src="js/dims.js?v=6"></script>
-<script src="js/story.js?v=6"></script>
-<script src="js/allies.js?v=6"></script>
-<script src="js/sites.js?v=6"></script>
-<script src="js/dungeon3.js?v=6"></script>
-<script src="js/world.js?v=6"></script>
-<script src="js/cine.js?v=6"></script>
-<script src="js/ldbosses.js?v=6"></script>
-<script src="js/lastdawn.js?v=6"></script>
-<script src="js/ldch1.js?v=6"></script>
+<script src="js/sprites.js?v=8"></script>
+<script src="js/audio.js?v=8"></script>
+<script src="js/data.js?v=8"></script>
+<script src="js/game.js?v=8"></script>
+<script src="js/art.js?v=8"></script>
+<script src="js/dungeon.js?v=8"></script>
+<script src="js/dungeon2.js?v=8"></script>
+<script src="js/bosses.js?v=8"></script>
+<script src="js/bossfx.js?v=8"></script>
+<script src="js/bossart.js?v=8"></script>
+<script src="js/structures.js?v=8"></script>
+<script src="js/powerups.js?v=8"></script>
+<script src="js/towns.js?v=8"></script>
+<script src="js/dims.js?v=8"></script>
+<script src="js/story.js?v=8"></script>
+<script src="js/allies.js?v=8"></script>
+<script src="js/sites.js?v=8"></script>
+<script src="js/dungeon3.js?v=8"></script>
+<script src="js/world.js?v=8"></script>
+<script src="js/cine.js?v=8"></script>
+<script src="js/ldbosses.js?v=8"></script>
+<script src="js/lastdawn.js?v=8"></script>
+<script src="js/ldch1.js?v=8"></script>
+<script src="js/ldch3.js?v=8"></script>
+<script src="js/ldch5.js?v=8"></script>
 <script src="https://cdn.jsdelivr.net/npm/nostr-tools@2.7.2/lib/nostr.bundle.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/5.3.4/mqtt.min.js"></script>
-<script src="js/net.js?v=6"></script>
-<script src="js/local.js?v=6"></script>
-<script src="js/devhooks.js?v=6"></script>
+<script src="js/net.js?v=8"></script>
+<script src="js/local.js?v=8"></script>
+<script src="js/devhooks.js?v=8"></script>
 </body>
 </html>
