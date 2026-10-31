@@ -6,7 +6,7 @@ const Net = {
   ws: null, role: null, code: null, peer: false, myChar: 'wren', peerChar: null,
   lvl: false, modal: null, chest: false, crypt: false, afterGuest: null, sfx: [], banners: [], kills: [], lastSnap: 0, lastIn: 0,
   active() { return !!(this.ws && this.peer && G && G.coop); },
-  busy() { return this.role === 'host' && (this.lvl || this.modal || this.chest || this.crypt); },
+  busy() { return this.role === 'host' && (this.lvl || this.modal || this.chest || this.crypt || this.gpause); },
   send(d) { if (this.ws && this.ws.readyState === 1) this.ws.send(JSON.stringify({ t: 'relay', d })); },
 };
 SCREENS.push('lobby', 'wait');
@@ -128,7 +128,7 @@ function onNet(m) {
   if (m.t === 'error') { lobbyStatus(m.msg); return; }
   if (m.t === 'left') {
     Net.peer = false;
-    if (G && G.coop && Net.role === 'host') { const g = G.players[1]; if (g) { g.down = true; g.hp = 0; } G.coop = null; banner('Your partner left', 'The night goes on', '#a59cc4'); Net.lvl = Net.modal = Net.chest = Net.crypt = false; if (state === 'wait') setState('play'); }
+    if (G && G.coop && Net.role === 'host') { const g = G.players[1]; if (g) { g.down = true; g.hp = 0; } G.coop = null; banner('Your partner left', 'The night goes on', '#a59cc4'); Net.lvl = Net.modal = Net.chest = Net.crypt = Net.gpause = false; if (state === 'wait') setState('play'); }
     else if (G && G.remote) { banner('The host left', '', '#d8354a'); setTimeout(openMenu, 1500); }
     if (state === 'lobby') renderLobbyChars();
     return;
@@ -144,6 +144,11 @@ function hostMsg(d) {
   if (!G || !G.coop) return;
   const g = guestPl();
   switch (d.t) {
+    case 'pause':
+      Net.gpause = d.on;
+      if (d.on) $('waitText').textContent = 'Your partner has paused the game. Please wait.';
+      else release();
+      break;
     case 'in': g.input = d.v; break;
     case 'act': if (state === 'play') asGuest(() => Mods.first('interact', g)); break;
     case 'pick': if (Net.lvl && G.guestChoices[d.i]) { asGuest(() => applyChoice(G.guestChoices[d.i])); guestLevelDone(); } break;
@@ -283,7 +288,11 @@ function guestMsg(d) {
   if (d.t === 'char') { Net.peerChar = d.id; renderLobbyChars(); return; }
   if (d.t === 'start') { startGuest(d); return; }
   if (!G || !G.remote) return;
-  if (d.t === 'snap') applySnap(d);
+  if (d.t === 'pause') {
+    Net.hpause = d.on;
+    if (d.on && state === 'play') { $('waitText').textContent = 'Your partner has paused the game. Please wait.'; setState('wait'); }
+    else if (!d.on && state === 'wait') setState('play');
+  } else if (d.t === 'snap') applySnap(d);
   else if (d.t === 'lvl') showGuestLevel(d);
   else if (d.t === 'modal') openModal({ ...d.def, buttons: d.def.buttons.map((b, i) => ({ ...b, act: () => Net.send({ t: 'mpick', i }) })) }, ME);
   else if (d.t === 'chest') {
@@ -463,4 +472,11 @@ gameOver = function (won) {
   if (Net.role === 'host' && G && G.coop && Net.active()) Net.send({ t: 'over', won });
   coopGameOver(won);
 };
-Mods.add({ state(s) { if (s === 'wait') $('waitText').textContent = $('waitText').textContent || 'Waiting for your partner...'; } });
+// Pausing in co-op tells the partner, who sees "please wait" (the host's pause also freezes the simulation)
+Mods.add({
+  state(s) {
+    if (s === 'wait') $('waitText').textContent = $('waitText').textContent || 'Waiting for your partner...';
+    const paused = s === 'pause' && !!(G && (G.coop || G.remote));
+    if (paused !== !!Net.pauseSent) { Net.pauseSent = paused; Net.send({ t: 'pause', on: paused }); }
+  },
+});

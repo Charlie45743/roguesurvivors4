@@ -217,8 +217,10 @@ addEventListener('keydown', e => {
   onKey(e);
 });
 addEventListener('keyup', e => { keys[e.code] = false; });
-addEventListener('blur', () => { for (const k in keys) keys[k] = false; if (state === 'play' || state === 'dungeon') openPause(); });
-document.addEventListener('visibilitychange', () => { if (document.hidden && (state === 'play' || state === 'dungeon')) openPause(); });
+// In co-op, losing focus must not pause: the host's pause would freeze the partner too
+const inCoop = () => !!(G && (G.coop || G.remote));
+addEventListener('blur', () => { for (const k in keys) keys[k] = false; if ((state === 'play' || state === 'dungeon') && !inCoop()) openPause(); });
+document.addEventListener('visibilitychange', () => { if (document.hidden && (state === 'play' || state === 'dungeon') && !inCoop()) openPause(); });
 addEventListener('pointerdown', () => { Snd.init(); applyVolume(); });
 cv.addEventListener('pointerdown', e => {
   if (state !== 'play' && !(state === 'dungeon' && e.pointerType !== 'mouse')) return;
