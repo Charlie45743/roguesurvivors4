@@ -904,12 +904,12 @@ openShop = function (kind, st, pl = P) { if (kind === 'runesmith') return runesm
 /* ---------- Hooks ---------- */
 Mods.add({
   update(dt) {
-    if (!G || G.dim) return;
+    if (!G || noStructs()) return;
     for (const st of structsNear(ME.x, ME.y)) if (st.built && !st.ruined) updateFolk(st, dt);
   },
   // keep trees and rocks off the roads that run out of town
   blocked(x, y) {
-    if (!G || G.dim) return false;
+    if (!G || noStructs()) return false;
     for (const st of structsNear(x, y)) {
       if (st.type !== 'village' && st.type !== 'town' && st.type !== 'ruinvillage') continue;
       if (onRoad(townPlan(st), x - st.x, y - st.y, 8)) return true;
@@ -917,7 +917,7 @@ Mods.add({
     return false;
   },
   ents(list) {
-    if (!G || G.dim) return;
+    if (!G || noStructs()) return;
     for (const st of structsNear(ME.x, ME.y)) if (st.built && !st.ruined && st.folk) for (const f of st.folk) if (onScreen(f.x, f.y, 20)) list.push(f);
   },
 });

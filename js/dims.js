@@ -111,6 +111,7 @@ function enterDimension(dim) {
     G.dim = dim; G.dimMul = def.mul; G.darkMul = def.dark; G.spawnMul = 1; G.dimT = 0; G.dimPhase = 'survive'; G.dimAcc = 0; G.dimBossIdx = 0;
     G.spawner = null; G.nextDim = null; G.advanceT = 0; G.dimEnraged = false; G.chainStarted = true; G.dimLeft = DIM_TIME[dim] || 100;
     biomeOverride = dim === 'island' ? isleBiome : () => dim;
+    G.dimStructs = !G.story; regionCache.clear();
     resetWorldCache();
     G.players.forEach((p, i) => { p.x = i * 18; p.y = 0; });
     if (G.boss) G.boss = null;
@@ -136,6 +137,7 @@ function exitDimension() {
     G.enemies = G.enemies.filter(e => e.prop || Math.hypot(e.x - ME.x, e.y - ME.y) > 160);
     G.dim = null; G.dimMul = null; G.saved = null;
     biomeOverride = null;
+    G.dimStructs = false; regionCache.clear();
     resetWorldCache();
     G.boss = G.enemies.find(e => e.boss && !e.minor && !e.dead) || null;
     if (G.boss) $('bossbar').classList.remove('hidden');
@@ -152,7 +154,7 @@ function dimBoss(px, py, enraged) {
   const id = ids[G.dimBossIdx];
   const [x, y] = G.dim === 'island' ? [ISLAND_R, 0] : px !== undefined ? [px, py] : edgePos(30);
   G.dimPhase = 'boss';
-  const b = makeBoss(id, id === 'herald' ? 0 : x, id === 'herald' ? -ISLAND_R * 0.5 : y, { hpMul: 0.5 + def.mul * 0.35, dmgMul: (0.2 + def.mul * 0.6) * (enraged ? 1.25 : 1), onDeath: e => dimBossDown(e) });
+  const b = makeBoss(id, id === 'herald' ? 0 : x, id === 'herald' ? -ISLAND_R * 0.5 : y, { hpMul: (0.5 + def.mul * 0.35) * (G.story ? 1 : 1.4), dmgMul: (0.2 + def.mul * 0.6) * (enraged ? 1.25 : 1), onDeath: e => dimBossDown(e) });
   banner(b.name, G.dim === 'island' && G.dimBossIdx === 1 ? 'The black sun descends' : 'Guardian of ' + def.name, def.color);
   Snd.play('warn');
 }
@@ -284,9 +286,11 @@ Mods.add({
       const def = DIMS[G.dim];
       let txt = '', col = def.color;
       if (G.story) txt = G.dimPhase === 'survive' && G.dim !== 'island' ? `GUARDIAN IN ${Math.max(0, Math.ceil(45 - G.dimT))}` : G.dimPhase === 'done' ? 'FIND THE GOLDEN PORTAL' : '';
-      else if (G.dimPhase === 'survive') { const left = Math.max(0, Math.ceil(G.dimLeft || 0)); txt = `FIND THE SEAL  ${left}`; if (left <= 15) col = Math.floor(now * 4) % 2 ? '#ff6a7a' : '#ffffff'; }
+      else if (G.dimLeft <= 0 && G.dimPhase !== 'done') { txt = 'THE DIMENSION IS COLLAPSING'; col = Math.floor(now * 4) % 2 ? '#ff6a7a' : '#ffffff'; }
+      else if (G.dimPhase === 'survive') txt = 'GEAR UP - BREAK THE SEAL';
+      else if (G.dimPhase === 'boss') txt = 'SLAY THE GUARDIAN';
       else if (G.dimPhase === 'done' && G.advanceT > 0) txt = `NEXT DIMENSION IN ${Math.ceil(G.advanceT)}`;
-      if (txt) drawText(ctx, txt, W / 2, 46, col, G.story ? 1 : 2);
+      if (txt) drawText(ctx, txt, W / 2, 44, col, 1);
     }
   },
 });
@@ -296,12 +300,14 @@ Mods.add({
    its foes), break it, and kill what answers. The way to the next dimension opens, and so on to the Drowned Isle's two
    titans. When the clock runs out first, the dimension collapses and the guardian comes for you, enraged. */
 const DIM_CHAIN = ['frozen', 'rift', 'void', 'demon', 'island'];
-const DIM_TIME = { frozen: 100, rift: 100, void: 110, demon: 110, island: 130 };
+const DIM_TIME = { frozen: 480, rift: 480, void: 480, demon: 480, island: 480 }; // eight minutes to gear up and slay the guardian
+const COLLAPSE_GRACE = 60; // after the clock hits zero the dimension has one more minute to live
+const dimClock = () => (G.dimLeft > 0 ? G.dimLeft : COLLAPSE_GRACE + G.dimLeft);
 
 function placeSpawner(dim) {
   let x, y;
   if (dim === 'island') { x = -ISLAND_R * 0.4; y = ISLAND_R * 0.12; }
-  else { const a = rand(0, TAU), R = rand(430, 640); x = Math.cos(a) * R; y = Math.sin(a) * R * 0.8; }
+  else { const a = rand(0, TAU), R = rand(750, 1100); x = Math.cos(a) * R; y = Math.sin(a) * R * 0.8; }
   ensureChunks(x, y);
   const f = { x, y };
   for (let i = 0; i < 3; i++) collideSolids(f, 16);
@@ -313,7 +319,7 @@ function nearSpawner(pl) {
 }
 function guardSpawner(s) {
   s.guarded = true;
-  const def = DIMS[G.dim], pool = Object.keys(def.enemies).length ? def.enemies : def.chainEnemies, n = 7 + DIM_CHAIN.indexOf(G.dim) * 2;
+  const def = DIMS[G.dim], pool = Object.keys(def.enemies).length ? def.enemies : def.chainEnemies, n = 9 + DIM_CHAIN.indexOf(G.dim) * 2;
   for (let i = 0; i < n; i++) { const a = i / n * TAU, e = spawnEnemy(weighted(pool), s.x + Math.cos(a) * 70, s.y + Math.sin(a) * 52); e.rise = 0.5; }
   banner('The seal is guarded', 'Cut through its keepers', DIMS[G.dim].color);
 }
@@ -324,11 +330,17 @@ function activateSpawner(s) {
   dimBoss(s.x, s.y - 30);
 }
 function collapseDimension() {
-  banner('The dimension collapses', 'The guardian comes for you', '#d8354a');
-  Snd.play('warn');
+  banner('The dimension collapses', 'The guardian is enraged. You have one minute', '#d8354a');
+  Snd.play('warn'); G.shake = 8;
   G.dimEnraged = true;
-  if (G.spawner) G.spawner.on = true;
-  dimBoss(undefined, undefined, true);
+  if (G.dimPhase === 'survive') { if (G.spawner) G.spawner.on = true; dimBoss(undefined, undefined, true); }
+  else for (const e of G.enemies) if (e.boss && !e.dead) { e.mul = (e.mul || 1) * 1.25; e.dmg *= 1.25; }
+}
+function crushParty() {
+  banner('The dimension crushes you', 'Nothing escapes the collapse', '#d8354a');
+  Snd.play('death');
+  G.over = true; G.deathT = 2; G.slowT = 2;
+  for (const p of G.players) burst(p.x, p.y, '#d8354a', 30, 90);
 }
 function drawSpawner(s, now) {
   const col = DIMS[s.dim].color, sx = s.x - camX, sy = s.y - camY, live = !s.on;
@@ -357,17 +369,22 @@ dimDirector = function (dt) {
   if (G.story) return storyDimDirector(dt);
   const def = DIMS[G.dim];
   G.dimT += dt;
-  if (G.dimPhase === 'survive') {
+  if (G.dimPhase !== 'done') {
     G.dimLeft -= dt;
+    if (G.dimLeft <= 0 && !G.dimEnraged) collapseDimension();
+    if (G.dimLeft <= -COLLAPSE_GRACE && !G.over) crushParty();
+  }
+  if (G.dimPhase === 'survive') {
     const sp = G.spawner;
     if (sp && !sp.guarded && G.players.some(p => Math.hypot(p.x - sp.x, p.y - sp.y) < 340)) guardSpawner(sp);
-    if (G.dimLeft <= 0) collapseDimension();
   } else if (G.dimPhase === 'done' && G.nextDim) {
     G.advanceT -= dt;
     if (G.advanceT <= 0 && state === 'play') { const n = G.nextDim; G.nextDim = null; enterDimension(n); return true; }
   }
   const pool = Object.keys(def.enemies).length ? def.enemies : def.chainEnemies;
-  const rate = G.dimPhase === 'survive' ? (2.4 + G.dimT / 20) * Math.sqrt(def.mul) : G.dimPhase === 'boss' ? 1.4 : 0;
+  const rate = G.dimPhase === 'done' ? 0 : Math.min(7, 2.2 + G.dimT / 80) * Math.sqrt(def.mul) * (G.dimPhase === 'boss' ? 0.7 : 0.85);
+  G.dimEliteT = (G.dimEliteT ?? 60) - dt;
+  if (G.dimEliteT <= 0 && G.dimPhase !== 'done') { G.dimEliteT = 75; const [ex, ey] = edgePos(30); const e = spawnEnemy('knight', ex, ey, { hpMul: 0.6 + def.mul * 0.2 }); e.rise = 0.5; banner('An elite hunts you', 'It carries treasure', def.color); }
   G.dimAcc += rate * (G.dimEnraged ? 1.8 : 1) * dt;
   while (G.dimAcc >= 1) {
     G.dimAcc--;

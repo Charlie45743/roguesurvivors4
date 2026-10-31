@@ -174,7 +174,9 @@ function chunk(cx, cy) {
   for (let i = 0; i < n; i++) {
     const x = cx * CH + Math.floor(r() * CH), y = cy * CH + Math.floor(r() * CH);
     if (Mods.call('blocked', x, y)) continue;
-    const k = pickWeighted(BIOME_DECOR[biomeAt(x, y)], r);
+    const bk = biomeAt(x, y);
+    if (bk === 'sea') continue;
+    const k = pickWeighted(BIOME_DECOR[bk], r);
     const d = { x, y, k, s: DECOR[k], seed: r() * 100 };
     if (PROP[k] || k === 'pond') {
       if (x * x + y * y < 70 * 70) continue;
@@ -867,7 +869,7 @@ function update(rdt) {
   }
   P = ME;
   updateTotems(dt);
-  if (!G.dim) { updateShrines(dt); updateCrypts(dt); }
+  if (!G.dim || G.dimStructs) { updateShrines(dt); updateCrypts(dt); }
   Mods.call('update', dt);
   P = ME;
   updateEnemies(dt);
@@ -2147,7 +2149,9 @@ function updateHud() {
   const set = (id, v) => { if (hudLast[id] !== v) { hudLast[id] = v; $(id).textContent = v; } };
   $('xpfill').style.width = `calc(${clamp(G.xp / G.xpNext, 0, 1) * 100}% - 4px)`;
   set('lvl', 'LV ' + G.level);
-  set('timer', fmtTime(G.t));
+  const chainClock = G.dim && !G.story && G.dimPhase !== 'done' && G.dimLeft !== undefined;
+  set('timer', chainClock ? fmtTime(dimClock()) : fmtTime(G.t));
+  if (chainClock) $('timer').classList.toggle('boss', G.dimLeft < 60 || !!G.boss);
   set('kills', G.kills);
   set('goldc', G.gold);
   const bk = Object.keys(G.buffs).filter(k => G.buffs[k] > 0).map(k => k + Math.ceil(G.buffs[k])).join();

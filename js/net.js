@@ -137,12 +137,174 @@ function mqttSocket() {
   setTimeout(() => { ws.readyState = 1; if (ws.onopen) ws.onopen(); }, 0);
   return ws;
 }
+/* Nostr relays are public, free, always on and speak secure WebSockets on port 443, so they work from almost any network.
+   We send every message to several relays at once and drop duplicates, which makes the link survive a slow or failing relay.
+   Rooms are an ephemeral-event tag (kind 29111, never stored). Message format: to|from|seq|payload. */
+const NOSTR_RELAYS = ['wss://relay.snort.social', 'wss://relay.primal.net', 'wss://nos.lol', 'wss://purplerelay.com', 'wss://nostr.mom'];
+const NOSTR_KIND = 29111;
+function nostrSocket() {
+  const { generateSecretKey, finalizeEvent } = NostrTools;
+  const sk = generateSecretKey(), me = Math.random().toString(36).slice(2, 10);
+  const ws = {
+    readyState: 0, onopen: null, onerror: null, onclose: null, onmessage: null, onunreachable: null,
+    socks: [], role: null, code: '', tag: '', gen: 0, seq: 0, seen: new Set(), peerSeen: 0, guest: null, hostId: null, created: false, whoisHit: false, timers: [],
+    emit(m) { if (ws.onmessage) ws.onmessage({ data: JSON.stringify(m) }); },
+    fail(msg) { ws.emit({ t: 'error', msg }); ws.close(); },
+    later(fn, ms) { const id = setTimeout(fn, ms); ws.timers.push(id); return id; },
+    reset() { ws.gen++; for (const t of ws.timers) { clearTimeout(t); clearInterval(t); } ws.timers = []; for (const s of ws.socks) { s.onopen = s.onmessage = s.onerror = s.onclose = null; try { s.close(); } catch (e) { /* closed */ } } ws.socks = []; ws.guest = null; ws.hostId = null; ws.created = false; ws.seen.clear(); },
+    raw(to, payload) {
+      if (payload.length > 60000) return;
+      const live = ws.socks.filter(s => s.readyState === 1);
+      if (!live.length) return;
+      const ev = finalizeEvent({ kind: NOSTR_KIND, created_at: Math.floor(Date.now() / 1000), tags: [['t', ws.tag]], content: `${to}|${me}|${++ws.seq}|${payload}` }, sk);
+      const msg = JSON.stringify(['EVENT', ev]);
+      for (const s of live) s.send(msg);
+    },
+    connectRelays(done) {
+      const gen = ws.gen;
+      let opened = 0, called = false, dead = 0;
+      const finish = () => { if (called || gen !== ws.gen) return; called = true; done(); };
+      const unreachable = () => { if (called || gen !== ws.gen) return; called = true; if (ws.onunreachable) ws.onunreachable(); else ws.fail('Could not reach any co-op relay. Check your connection.'); };
+      for (const url of NOSTR_RELAYS) {
+        let s;
+        try { s = new WebSocket(url); } catch (e) { dead++; continue; }
+        ws.socks.push(s);
+        s.onopen = () => {
+          if (gen !== ws.gen) return;
+          s.send(JSON.stringify(['REQ', 'rs3', { kinds: [NOSTR_KIND], '#t': [ws.tag], since: Math.floor(Date.now() / 1000) - 3 }]));
+          opened++;
+          if (opened === 1) ws.later(finish, 1300);
+          if (opened >= 3) finish();
+        };
+        s.onmessage = ev => { if (gen === ws.gen) ws.onEvent(ev.data); };
+        s.onerror = s.onclose = () => { if (gen !== ws.gen) return; s.onerror = s.onclose = null; dead++; if (dead >= NOSTR_RELAYS.length && !opened) unreachable(); };
+      }
+      ws.later(() => { if (!opened) unreachable(); }, 7000);
+    },
+    onEvent(data) {
+      let m;
+      try { m = JSON.parse(data); } catch (e) { return; }
+      if (m[0] !== 'EVENT' || !m[2] || m[2].kind !== NOSTR_KIND) return;
+      const c = m[2].content, i1 = c.indexOf('|'), i2 = c.indexOf('|', i1 + 1), i3 = c.indexOf('|', i2 + 1);
+      if (i3 < 0) return;
+      const to = c.slice(0, i1), from = c.slice(i1 + 1, i2), seq = c.slice(i2 + 1, i3), payload = c.slice(i3 + 1);
+      if (from === me) return;
+      const key = from + ':' + seq;
+      if (ws.seen.has(key)) return;
+      ws.seen.add(key);
+      if (ws.seen.size > 800) ws.seen.delete(ws.seen.values().next().value);
+      if (to !== '*' && to !== me && !(to === 'h' && ws.role === 'host')) return;
+      const isCtl = payload.startsWith('{"c":');
+      if (ws.role === 'host') {
+        if (ws.guest && from === ws.guest) ws.peerSeen = Date.now();
+        if (!isCtl) { if (from === ws.guest) ws.onmessage({ data: payload }); return; }
+        const ctl = JSON.parse(payload).c;
+        if (ctl === 'whois') { if (ws.created) ws.raw('*', '{"c":"iam"}'); }
+        else if (ctl === 'iam') { if (!ws.created) ws.whoisHit = true; }
+        else if (ctl === 'hello' && ws.created) {
+          if (!ws.guest || ws.guest === from) { const fresh = ws.guest !== from; ws.guest = from; ws.peerSeen = Date.now(); ws.raw(from, '{"c":"ack"}'); if (fresh) ws.emit({ t: 'peer' }); }
+          else ws.raw(from, '{"c":"full"}');
+        } else if (ctl === 'bye' && from === ws.guest) { ws.guest = null; ws.emit({ t: 'left' }); }
+      } else if (ws.role === 'guest') {
+        if (ws.hostId && from === ws.hostId) ws.peerSeen = Date.now();
+        if (!isCtl) { if (from === ws.hostId) ws.onmessage({ data: payload }); return; }
+        const ctl = JSON.parse(payload).c;
+        if (ctl === 'ack' && !ws.hostId) { ws.hostId = from; ws.peerSeen = Date.now(); ws.emit({ t: 'joined', code: ws.code }); ws.beat(); }
+        else if (ctl === 'full') ws.fail('That room is already full.');
+        else if (ctl === 'bye' && from === ws.hostId) { ws.emit({ t: 'left' }); ws.close(); }
+      }
+    },
+    beat() {
+      const id = setInterval(() => {
+        if (ws.readyState === 3) return;
+        const alive = Date.now() - ws.peerSeen < 14000;
+        if (ws.role === 'host') { if (ws.guest) { ws.raw(ws.guest, '{"c":"hb"}'); if (!alive) { ws.guest = null; ws.emit({ t: 'left' }); } } }
+        else if (ws.role === 'guest') { ws.raw('h', '{"c":"hb"}'); if (!alive) { ws.emit({ t: 'left' }); ws.close(); } }
+      }, 2500);
+      ws.timers.push(id);
+    },
+    send(str) {
+      if (str.startsWith('{"t":"create"')) ws.host(0);
+      else if (str.startsWith('{"t":"join"')) ws.join(JSON.parse(str).code);
+      else if (ws.role === 'host') { if (ws.guest) ws.raw(ws.guest, str); }
+      else if (ws.role === 'guest' && ws.hostId) ws.raw('h', str);
+    },
+    host(tries) {
+      ws.reset();
+      ws.role = 'host';
+      ws.code = Array.from({ length: 4 }, () => 'ABCDEFGHJKLMNPQRSTUVWXYZ'[Math.random() * 24 | 0]).join('');
+      ws.tag = 'rs3-' + ws.code; ws.whoisHit = false;
+      const gen = ws.gen;
+      ws.connectRelays(() => {
+        ws.raw('*', '{"c":"whois"}');
+        ws.later(() => {
+          if (gen !== ws.gen) return;
+          if (ws.whoisHit) { if (tries < 8) ws.host(tries + 1); else ws.fail('Could not find a free room code.'); return; }
+          ws.created = true; ws.peerSeen = Date.now(); ws.beat();
+          ws.emit({ t: 'created', code: ws.code });
+        }, 1300);
+      });
+    },
+    join(code) {
+      ws.reset();
+      ws.role = 'guest'; ws.code = code; ws.tag = 'rs3-' + code;
+      const gen = ws.gen;
+      ws.connectRelays(() => {
+        let tries = 0;
+        const hello = () => {
+          if (gen !== ws.gen || ws.hostId) return;
+          if (tries++ >= 5) { ws.fail('No room with that code, or the host did not answer.'); return; }
+          ws.raw('h', JSON.stringify({ c: 'hello', id: me }));
+          ws.later(hello, 1600);
+        };
+        hello();
+      });
+    },
+    bye() { if (ws.role === 'host' && ws.guest) ws.raw(ws.guest, '{"c":"bye"}'); else if (ws.role === 'guest' && ws.hostId) ws.raw('h', '{"c":"bye"}'); },
+    close() {
+      if (ws.readyState === 3) return;
+      ws.readyState = 3;
+      ws.bye();
+      const socks = ws.socks; ws.socks = [];
+      ws.reset();
+      setTimeout(() => { for (const s of socks) try { s.close(); } catch (e) { /* closed */ } }, 400);
+      if (ws.onclose) ws.onclose();
+    },
+  };
+  setTimeout(() => { ws.readyState = 1; if (ws.onopen) ws.onopen(); }, 0);
+  return ws;
+}
+addEventListener('pagehide', () => { try { if (Net.ws && Net.ws.bye) Net.ws.bye(); } catch (e) { /* leaving */ } });
+
+/* Nostr first; if no relay can be reached at all, fall back to the MQTT broker */
+function hybridSocket() {
+  const ws = { readyState: 0, onopen: null, onerror: null, onclose: null, onmessage: null, inner: null, pending: null,
+    send(str) { if (str.startsWith('{"t":"create"') || str.startsWith('{"t":"join"')) ws.pending = str; ws.inner.send(str); },
+    bye() { if (ws.inner && ws.inner.bye) ws.inner.bye(); },
+    close() { ws.readyState = 3; ws.inner.close(); } };
+  const wire = inner => {
+    ws.inner = inner;
+    inner.onmessage = ev => ws.onmessage && ws.onmessage(ev);
+    inner.onclose = () => { if (ws.inner === inner && ws.onclose) ws.onclose(); };
+  };
+  const nostr = nostrSocket();
+  wire(nostr);
+  nostr.onunreachable = () => {
+    if (typeof mqtt === 'undefined') { nostr.fail('Could not reach any co-op relay. Check your connection.'); return; }
+    const m = mqttSocket();
+    wire(m);
+    if (ws.pending) m.send(ws.pending);
+  };
+  setTimeout(() => { ws.readyState = 1; if (ws.onopen) ws.onopen(); }, 0);
+  return ws;
+}
+
 function connect(then) {
   if (Net.ws && Net.ws.readyState <= 1) { then(); return; }
   const url = coopUrl();
-  if (!url && typeof mqtt === 'undefined') { lobbyStatus('Could not load the co-op library. Check your connection and reload.'); return; }
+  if (!url && typeof NostrTools === 'undefined' && typeof mqtt === 'undefined') { lobbyStatus('Could not load the co-op library. Check your connection and reload.'); return; }
   lobbyStatus(url ? 'Connecting to the co-op server (a sleeping free host can take up to a minute)...' : 'Connecting...');
-  const ws = url ? new WebSocket(url) : mqttSocket();
+  const ws = url ? new WebSocket(url) : typeof NostrTools !== 'undefined' ? hybridSocket() : mqttSocket();
   Net.ws = ws;
   ws.onopen = then;
   ws.onerror = () => lobbyStatus('Could not reach the co-op server.');
@@ -374,7 +536,7 @@ function startGuest(d) {
 let lastBuild = '';
 function applySnap(s) {
   const [t, level, xp, xpNext, kills, gold, dim, dimPhase, dimT, won, over, shake, frags, darkMul, dimLeft, advanceT] = s.g;
-  if (dim !== G.dim) { G.dim = dim; biomeOverride = dim ? (dim === 'island' ? isleBiome : () => dim) : null; resetWorldCache(); }
+  if (dim !== G.dim) { G.dim = dim; G.dimStructs = !!dim; regionCache.clear(); biomeOverride = dim ? (dim === 'island' ? isleBiome : () => dim) : null; resetWorldCache(); }
   Object.assign(G, { t, level, xp, xpNext, kills, gold, dimPhase, dimT, won: !!won, shake: Math.max(G.shake, shake), fragments: frags, darkMul: darkMul || null, buffs: s.bf, dimLeft, advanceT });
   G.spawner = s.sp ? { x: s.sp[0], y: s.sp[1], on: !!s.sp[2], dim: s.sp[3] } : null;
   const keepAl = new Map((G.allies || []).map(a => [a.id, a]));
@@ -477,7 +639,8 @@ Mods.add({
     for (const pl of G.players) if (!G.dim) for (const st of structsNear(pl.x, pl.y)) if (!st.built) buildStruct(st);
     updateParts(dt);
     const now = performance.now();
-    if (now - Net.lastIn > 40) { Net.lastIn = now; Net.send({ t: 'in', v: ME.down ? [0, 0] : inputVec() }); }
+    const iv = ME.down ? [0, 0] : inputVec(), same = Net.lastV && Net.lastV[0] === iv[0] && Net.lastV[1] === iv[1];
+    if ((!same && now - Net.lastIn > 60) || now - Net.lastIn > 250) { Net.lastIn = now; Net.lastV = iv; Net.send({ t: 'in', v: iv }); }
     updateHud();
   },
 });

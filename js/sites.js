@@ -542,7 +542,7 @@ ambience = function (st, now, dt) { siteAmbience(st, now, dt); const d = SITES[s
 /* ---------- Per-frame behaviour: healing fires, safe zones, beacon waves ---------- */
 Mods.add({
   update(dt) {
-    if (G.dim) return;
+    if (noStructs()) return;
     for (const st of regionCache.values()) {
       if (!st || !st.built) continue;
       const d = SITES[st.type];
@@ -587,3 +587,6 @@ Mods.add({
     }
   },
 });
+
+/* Camps and shrines in the dimensions: places to gear up while the clock runs */
+const DIM_STRUCT_W = { fieldhospital: 0.45, standingstones: 0.9, bloodaltar: 0.8, gambler: 0.7, library: 0.6, mercs: 0.55, obelisk: 0.8, outpost: 0.8, campsite: 1.2, orchard: 0.3 };

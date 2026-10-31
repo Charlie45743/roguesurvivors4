@@ -88,15 +88,17 @@ const STRUCT_R = { town: 290, village: 200, ruinvillage: 190, hut: 60, tower: 50
 const STRUCT_COL = { town: '#ffd35a', village: '#ffd35a', ruinvillage: '#a59cc4', hut: '#a6e05a', tower: '#f2eee6', ruins: '#e8742c', graveyard: '#a6e05a', bandits: '#d8354a', mine: '#9a6a42', watchtower: '#9a6a42', gate: '#d8354a', temple: '#c9c2e0', mansion: '#e27bf0' };
 const NPC_NAMES = { witch: 'Witch', smith: 'Blacksmith', alchemist: 'Alchemist', cartographer: 'Cartographer', hunter: 'Hunter', merchant: 'Merchant', priest: 'Priest' };
 const regionCache = new Map();
+const noStructs = () => !!G.dim && !G.dimStructs;
 function regionStruct(rx, ry) {
-  if (!G || G.dim || G.story?.noStructs) return null;
+  if (!G || (G.dim && !G.dimStructs) || G.story?.noStructs) return null;
+  if (!G.dim && !G.story && typeof coastK === 'function' && coastK(rx * REGION, ry * REGION) > 0.8) return null;
   const key = rx + ',' + ry;
   if (regionCache.has(key)) return regionCache.get(key);
   let st = null;
   if (Math.abs(rx) + Math.abs(ry) > 0) {
-    const r = mulberry32((rx * 92837111) ^ (ry * 689287499) ^ (G.seed * 7));
-    if (r() < 0.88) {
-      const type = pickWeighted(STRUCT_W, r);
+    const r = mulberry32((rx * 92837111) ^ (ry * 689287499) ^ (G.seed * 7) ^ (G.dim ? G.dim.length * 7919 + G.dim.charCodeAt(0) * 104729 : 0));
+    if (r() < (G.dim ? 0.5 : 0.88)) {
+      const type = pickWeighted(G.dim ? DIM_STRUCT_W : STRUCT_W, r);
       const jit = Math.max(0.08, 0.45 - STRUCT_R[type] / REGION * 1.1);
       st = { id: key, type, x: rx * REGION + (r() - 0.5) * REGION * jit, y: ry * REGION + (r() - 0.5) * REGION * jit, R: STRUCT_R[type], seed: (r() * 1e9) | 0, pieces: [], npcs: [], built: false };
     }
@@ -666,7 +668,7 @@ function drawMinimap(now) {
     if (mx < x0 || mx > x0 + S - sz || my < y0 || my > y0 + S - sz) return;
     ctx.fillStyle = c; ctx.fillRect(Math.round(mx - sz / 2), Math.round(my - sz / 2), sz, sz);
   };
-  if (!G.dim) {
+  if (!noStructs()) {
     const witch = ME.relics?.includes('witchEye');
     for (const st of structsNear(ME.x, ME.y, 2)) {
       const seen = st.built || G.revealed?.has(st.id) || witch;
@@ -688,12 +690,12 @@ Mods.add({
   newRun() { regionCache.clear(); G.fragments = 0; G.keys = {}; G.ev = null; G.eventT = 70; G.bounty = null; for (const pl of G.players) { pl.relics = []; pl.bonus = {}; } },
   solidsCleared() { if (!G) return; for (const st of regionCache.values()) if (st && st.built) registerStruct(st); },
   blocked(x, y) {
-    if (!G || G.dim) return false;
+    if (!G || noStructs()) return false;
     for (const st of structsNear(x, y)) if (Math.hypot(st.x - x, (st.y - y) * 1.2) < st.R + 16) return true;
     return false;
   },
   update(dt) {
-    if (G.dim) return;
+    if (noStructs()) return;
     for (const pl of G.players) for (const st of structsNear(pl.x, pl.y)) {
       if (!st.built) buildStruct(st);
       if (!st.active && Math.hypot(st.x - pl.x, st.y - pl.y) < st.R + 220) activateStruct(st);
@@ -731,20 +733,20 @@ Mods.add({
     else if (it.k === 'key') { G.keys[it.st.id] = true; banner('Mansion key', 'Now find the locked mansion', '#ffd35a'); Snd.play('chest'); }
   },
   interact(pl = ME) {
-    if (G.dim) return false;
+    if (noStructs()) return false;
     const s = G.shrines.find(x => x.uses > 0 && Math.hypot(x.x - pl.x, x.y - pl.y) < 22);
     if (s && s.kind && s.kind !== 'fortune') { shrineKind(s, pl); return true; }
     if (s && pl !== ME) { fortuneModal(s, pl); return true; }
     return worldInteract(pl);
   },
   promptLabel() {
-    if (!G || G.dim) return '';
+    if (!G || noStructs()) return '';
     if (G.nearShrine && G.nearShrine.kind && G.nearShrine.kind !== 'fortune') return 'E · ' + SHRINE_KINDS[G.nearShrine.kind].name;
     const it = nearInteract(ME);
     return it ? 'E · ' + it.label : '';
   },
   drawGround(now) {
-    if (G.dim) return;
+    if (noStructs()) return;
     for (const st of structsNear(ME.x, ME.y)) {
       if (!st.built || !onScreen(st.x, st.y, st.R + 200)) continue;
       const sx = st.x - camX, sy = st.y - camY;
@@ -761,7 +763,7 @@ Mods.add({
     drawEventGround(now);
   },
   ents(list) {
-    if (G.dim) return;
+    if (noStructs()) return;
     for (const st of structsNear(ME.x, ME.y)) {
       if (!st.built || !onScreen(st.x, st.y, st.R + 200)) continue;
       const fade = st.type === 'bandits' && st.fade ? Math.max(0, 1 - st.fade / 4) : 1;
@@ -792,7 +794,7 @@ Mods.add({
       const wob = Math.sin(performance.now() / 900) * 160;
       list.push({ x: ev.boss.x + wob, y: ev.boss.y - wob * 0.6, pcolor: '#8ff0ff', picon: ICON.skull });
     }
-    if (!G.dim) for (const st of structsNear(ME.x, ME.y)) {
+    if (!noStructs()) for (const st of structsNear(ME.x, ME.y)) {
       if (st.type === 'mansion' && st.active && !G.keys?.[st.id] && st.keyAt && Math.hypot(ME.x - st.x, ME.y - st.y) < 260 && !onScreen(st.keyAt.x, st.keyAt.y, 10)) list.push({ x: st.keyAt.x, y: st.keyAt.y, pcolor: '#ffd35a', picon: BUILD.key });
     }
   },
@@ -951,13 +953,13 @@ function ambience(st, now, dt) {
 let ambienceT = performance.now();
 Mods.add({
   drawTop(now) {
-    if (!G || G.dim) return;
+    if (!G || noStructs()) return;
     const dt = Math.min(0.05, (performance.now() - ambienceT) / 1000);
     ambienceT = performance.now();
     for (const st of structsNear(ME.x, ME.y)) if (st.built && onScreen(st.x, st.y, st.R + 120)) ambience(st, now, state === 'play' ? dt : 0);
   },
   drawOverlay() {
-    if (!G || G.dim || state !== 'play') return;
+    if (!G || noStructs() || state !== 'play') return;
     for (const st of structsNear(ME.x, ME.y)) {
       if (!st.built || !onScreen(st.x, st.y, 10)) continue;
       const d = Math.hypot(st.x - ME.x, st.y - ME.y);
