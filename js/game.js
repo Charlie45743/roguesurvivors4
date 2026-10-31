@@ -226,6 +226,7 @@ document.addEventListener('visibilitychange', () => { if (document.hidden && (st
 addEventListener('pointerdown', () => { Snd.init(); applyVolume(); });
 cv.addEventListener('pointerdown', e => {
   if (state !== 'play' && !(state === 'dungeon' && e.pointerType !== 'mouse')) return;
+  if (e.pointerType === 'mouse' && e.button !== 0) return;   // right click interacts instead of steering
   joy.active = true; joy.id = e.pointerId; joy.ox = joy.x = e.clientX; joy.oy = joy.y = e.clientY;
 });
 addEventListener('pointermove', e => { if (joy.active && e.pointerId === joy.id) { joy.x = e.clientX; joy.y = e.clientY; } });
@@ -290,7 +291,7 @@ function newRun(cid, opts = {}) {
     rerolls: 2 + (save.shop.reroll || 0), revivals: save.shop.revival || 0, choices: [], chest: null,
     buffs: {}, totems: [], shrines: [], shrineT: 35, shrineCost: 25, cursePending: 0, shrine: null, nearShrine: null,
     crypts: [], cryptT: 95, nearCrypt: null, pausedFrom: null,
-    seed: opts.seed ?? (Math.random() * 1e9 | 0), dim: null, players: [], coop: opts.coop || null, story: opts.story || null, local: !!opts.local,
+    seed: opts.seed ?? (Math.random() * 1e9 | 0), dim: null, players: [], coop: opts.coop || null, story: opts.story || null, local: !!opts.local, localDevs: opts.local || null,
   };
   // Builds live on each player; these keep the single-player code paths reading "the acting player's" build
   Object.defineProperties(G, {
@@ -2414,7 +2415,7 @@ function gameOver(won) {
   lastChar = G.ch.id;
 }
 let lastChar = 'wren';
-$('btnAgain').onclick = () => { Snd.play('select'); if (G && G.local) startLocal(); else newRun(lastChar); };
+$('btnAgain').onclick = () => { Snd.play('select'); if (G && G.local) restartLocal(); else newRun(lastChar); };
 $('btnMenu').onclick = () => { Snd.play('select'); openMenu(); };
 
 /* ---------- Menu, characters, altar ---------- */

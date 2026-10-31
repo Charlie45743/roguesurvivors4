@@ -231,10 +231,11 @@ const STORY = [
   },
 ];
 
-function startChapter(i) {
+// With local players, everyone plays the chapter as the wanderer they picked
+function startChapter(i, local) {
   const ch = STORY[i];
   Snd.init();
-  newRun(ch.char, { story: { chapter: i, noPortals: true } });
+  newRun(local ? local[0].ch : ch.char, { story: { chapter: i, noPortals: true }, local });
   G.evIdx = EVENTS.length;
   G.eventT = Infinity;
   G.storyState = { stage: 0 };
@@ -257,7 +258,7 @@ function chapterDone(lines, final) {
     openModal({
       title: final ? 'The Long Night is over' : 'Chapter complete', color: '#ffd35a', sub: STORY[i].title + ' · +150 gold' + (next ? ` · ${CHARS.find(c => c.id === next.char).name} joins your roster` : ''),
       body: final ? '<p class="flavor">The shards climb into the sky and knit together. For the first time in a hundred years, the light in Cinderwake does not come from fire.</p><p>Thank you for playing.</p>' : `<p class="flavor">Next: ${next.title}. ${next.blurb}</p>`,
-      buttons: [...(next ? [{ label: 'Next chapter', primary: true, act: () => startChapter(i + 1) }] : []), { label: 'Return to the menu', act: () => openMenu() }],
+      buttons: [...(next ? [{ label: 'Next chapter', primary: true, act: () => startChapter(i + 1, G.localDevs || undefined) }] : []), { label: 'Return to the menu', act: () => openMenu() }],
     });
   });
 }
@@ -316,7 +317,7 @@ Mods.add({
     const ch = chapter(), idx = G.story?.chapter;
     setTimeout(() => {
       $('btnAgain').textContent = ch ? 'Retry chapter' : 'Rise again';
-      $('btnAgain').onclick = () => { Snd.play('select'); if (ch) startChapter(idx); else newRun(lastChar); };
+      $('btnAgain').onclick = () => { Snd.play('select'); if (G && G.local) restartLocal(); else if (ch) startChapter(idx); else newRun(lastChar); };
     }, 0);
     return false;
   },

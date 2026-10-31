@@ -333,8 +333,6 @@ function useSocket(ws, then, fallback) {
   };
   ws.onmessage = ev => onNet(JSON.parse(ev.data));
 }
-$('btnCoop').onclick = () => { Snd.play('select'); openCoopMenu(); };
-$('btnOnline').onclick = () => { Snd.play('select'); openLobby(); };
 $('btnCreate').onclick = () => { Snd.play('select'); connect(() => Net.ws.send(JSON.stringify({ t: 'create' }))); };
 $('btnJoin').onclick = () => {
   const code = $('roomCode').value.trim().toUpperCase();
