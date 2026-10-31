@@ -33,56 +33,103 @@ function renderLobbyChars() {
   $('roomInfo').textContent = Net.peer ? `Partner joined as ${CHARS.find(c => c.id === Net.peerChar)?.name || '...'}` : Net.code ? 'Waiting for your partner...' : '';
   $('btnStartCoop').classList.toggle('hidden', !(Net.role === 'host' && Net.peer));
 }
-/* Transport. By default co-op is peer to peer (WebRTC via PeerJS), so it works from static hosting such as GitHub Pages
-   with no game server. The room code is the host's peer id. To use the serve.js relay instead, set COOP_SERVER to its
-   address (e.g. 'wss://your-app.onrender.com/ws') or open the page with ?server=wss://host/ws. */
+/* Transport. Co-op rooms run through a free public MQTT broker over secure WebSockets, so the game works from static
+   hosting such as GitHub Pages with no game server of our own, and it works behind any home or school router
+   (unlike peer to peer, which strict NATs block). To use the serve.js relay instead, set COOP_SERVER to its address
+   (e.g. 'wss://your-app.onrender.com/ws') or open the page with ?server=wss://host/ws. */
 const COOP_SERVER = '';
-const PEER_PREFIX = 'rogue-survivors-3-';
+const BROKERS = ['wss://broker.hivemq.com:8884/mqtt', 'wss://broker.emqx.io:8084/mqtt'];
 const coopUrl = () => new URLSearchParams(location.search).get('server') || COOP_SERVER;
 
-/* A WebSocket look-alike speaking the same protocol as serve.js (create / join / relay), carried over a PeerJS data connection */
-function peerSocket() {
+/* A WebSocket look-alike speaking the same protocol as serve.js (create / join / relay), carried over MQTT topics:
+     <room>/room      retained "live" marker the host owns; cleared when the host leaves or drops (via the MQTT will)
+     <room>/h         everything sent to the host        <room>/g/<id>   everything sent to guest <id>
+   Control messages are {"c":...}; relayed game messages are passed through untouched. */
+function mqttSocket() {
   const ws = {
-    readyState: 0, onopen: null, onerror: null, onclose: null, onmessage: null, peer: null, conn: null, timer: 0,
+    readyState: 0, onopen: null, onerror: null, onclose: null, onmessage: null, cli: null, base: '', gid: '', guest: null, role: null, timer: 0, gen: 0,
     emit(m) { if (ws.onmessage) ws.onmessage({ data: JSON.stringify(m) }); },
     fail(msg) { ws.emit({ t: 'error', msg }); ws.close(); },
-    reset() { clearTimeout(ws.timer); if (ws.peer) { ws.peer.destroy(); ws.peer = null; } ws.conn = null; },
+    reset() { ws.gen++; clearTimeout(ws.timer); if (ws.cli) { ws.cli.end(true); ws.cli = null; } ws.guest = null; ws.role = null; },
+    pub(topic, str, retain) { if (ws.cli) ws.cli.publish(topic, str, { qos: 0, retain: !!retain }); },
+    /* Connect to the first broker that answers, then hand the client to `use`. Stale attempts (gen changed) are dropped. */
+    open(will, use, i = 0) {
+      const gen = ws.gen;
+      if (i >= BROKERS.length) { ws.fail('Could not reach the co-op service. Check your connection or try again in a minute.'); return; }
+      const cli = mqtt.connect(BROKERS[i], { reconnectPeriod: 0, connectTimeout: 7000, keepalive: 15, clean: true, will });
+      let done = false;
+      const next = () => { if (done || gen !== ws.gen) return; done = true; cli.end(true); ws.open(will, use, i + 1); };
+      cli.on('error', next);
+      cli.on('close', () => { if (!done) next(); else if (gen === ws.gen && ws.cli === cli) ws.close(); });
+      cli.on('connect', () => { if (done || gen !== ws.gen) { if (!done) { done = true; cli.end(true); } return; } done = true; ws.cli = cli; use(cli, i); });
+      cli.on('message', (topic, buf) => { if (gen === ws.gen) ws.onTopic(topic, buf.toString()); });
+    },
     send(str) {
-      const m = JSON.parse(str);
-      if (m.t === 'create') ws.host(0);
-      else if (m.t === 'join') ws.join(String(m.code).toUpperCase());
-      else if (ws.conn && ws.conn.open) ws.conn.send(str);
+      if (str.startsWith('{"t":"create"')) ws.host(0);
+      else if (str.startsWith('{"t":"join"')) ws.join(JSON.parse(str).code);
+      else if (ws.role === 'host') { if (ws.guest) ws.pub(ws.base + '/g/' + ws.guest, str); }
+      else if (ws.role === 'guest') ws.pub(ws.base + '/h', str);
+    },
+    onTopic(topic, s) {
+      if (topic.endsWith('/room')) { if (ws.role === 'guest' && !s) { ws.emit({ t: 'left' }); ws.close(); } else ws.roomSeen = !!s; return; }
+      if (!s.startsWith('{"c":')) { if (ws.onmessage) ws.onmessage({ data: s }); return; }
+      const m = JSON.parse(s);
+      if (ws.role === 'host') {
+        if (m.c === 'hello') {
+          if (!ws.guest || ws.guest === m.id) { const fresh = ws.guest !== m.id; ws.guest = m.id; ws.pub(ws.base + '/g/' + m.id, '{"c":"ack"}'); if (fresh) ws.emit({ t: 'peer' }); }
+          else ws.pub(ws.base + '/g/' + m.id, '{"c":"full"}');
+        } else if (m.c === 'bye' && m.id === ws.guest) { ws.guest = null; ws.emit({ t: 'left' }); }
+      } else if (ws.role === 'guest') {
+        if (m.c === 'ack') { clearTimeout(ws.timer); ws.emit({ t: 'joined', code: ws.code }); }
+        else if (m.c === 'full') ws.fail('That room is already full.');
+      }
     },
     host(tries) {
       ws.reset();
-      const code = Array.from({ length: 4 }, () => 'ABCDEFGHJKLMNPQRSTUVWXYZ'[Math.random() * 24 | 0]).join('');
-      const peer = ws.peer = new Peer(PEER_PREFIX + code);
-      peer.on('open', () => ws.emit({ t: 'created', code }));
-      peer.on('error', e => { if (e.type === 'unavailable-id' && tries < 6) ws.host(tries + 1); else ws.fail('Could not set up the room (' + e.type + ').'); });
-      peer.on('connection', conn => {
-        if (ws.conn) { conn.on('open', () => { conn.send(JSON.stringify({ t: 'error', msg: 'That room is already full.' })); setTimeout(() => conn.close(), 300); }); return; }
-        ws.conn = conn;
-        conn.on('open', () => ws.emit({ t: 'peer' }));
-        conn.on('data', d => ws.onmessage({ data: d }));
-        conn.on('close', () => { if (ws.conn === conn) { ws.conn = null; ws.emit({ t: 'left' }); } });
+      const code = ws.code = Array.from({ length: 4 }, () => 'ABCDEFGHJKLMNPQRSTUVWXYZ'[Math.random() * 24 | 0]).join('');
+      const base = ws.base = 'rogue-survivors-3/v1/' + code, gen = ws.gen;
+      ws.role = 'host'; ws.roomSeen = false;
+      ws.timer = setTimeout(() => ws.fail('The co-op service is not answering. Try again in a minute.'), 20000);
+      ws.open({ topic: base + '/room', payload: '', retain: true }, cli => {
+        cli.subscribe(base + '/room', () => setTimeout(() => {
+          if (gen !== ws.gen) return;
+          if (ws.roomSeen) { if (tries < 8) ws.host(tries + 1); else ws.fail('Could not find a free room code.'); return; } // someone else is hosting this code
+          clearTimeout(ws.timer);
+          cli.subscribe(base + '/h', () => { ws.pub(base + '/room', 'live', true); ws.emit({ t: 'created', code }); });
+        }, 900));
       });
     },
     join(code) {
       ws.reset();
-      const peer = ws.peer = new Peer();
-      peer.on('error', e => ws.fail(e.type === 'peer-unavailable' ? 'No room with that code.' : 'Could not connect (' + e.type + ').'));
-      peer.on('open', () => {
-        const conn = ws.conn = peer.connect(PEER_PREFIX + code, { reliable: true });
-        ws.timer = setTimeout(() => { if (!conn.open) ws.fail('Could not reach the host. A strict network or firewall may be blocking peer to peer.'); }, 15000);
-        conn.on('open', () => { clearTimeout(ws.timer); ws.emit({ t: 'joined', code }); });
-        conn.on('data', d => ws.onmessage({ data: d }));
-        conn.on('close', () => { ws.emit({ t: 'left' }); ws.close(); });
-      });
+      const base = ws.base = 'rogue-survivors-3/v1/' + code, gid = ws.gid = Math.random().toString(36).slice(2, 10), gen = ws.gen;
+      ws.role = 'guest'; ws.code = code; ws.roomSeen = false;
+      ws.timer = setTimeout(() => ws.fail('The co-op service is not answering. Try again in a minute.'), 25000);
+      const will = { topic: base + '/h', payload: JSON.stringify({ c: 'bye', id: gid }) };
+      /* A broker only knows the rooms made on it, so look for the host on each one in turn */
+      const look = (cli, i) => cli.subscribe(base + '/room', () => setTimeout(() => {
+        if (gen !== ws.gen) return;
+        if (!ws.roomSeen) {
+          if (i + 1 < BROKERS.length) { cli.end(true); ws.cli = null; ws.open(will, look, i + 1); } else ws.fail('No room with that code.');
+          return;
+        }
+        cli.subscribe(base + '/g/' + gid, () => {
+          ws.pub(base + '/h', JSON.stringify({ c: 'hello', id: gid }));
+          clearTimeout(ws.timer);
+          ws.timer = setTimeout(() => ws.fail('The host did not answer.'), 10000);
+        });
+      }, 1500));
+      ws.open(will, look);
     },
     close() {
       if (ws.readyState === 3) return;
       ws.readyState = 3;
-      ws.reset();
+      const cli = ws.cli, role = ws.role, base = ws.base, gid = ws.gid;
+      if (cli && cli.connected) {
+        if (role === 'host') cli.publish(base + '/room', '', { retain: true });
+        else if (role === 'guest') cli.publish(base + '/h', JSON.stringify({ c: 'bye', id: gid }));
+      }
+      const c = cli; ws.cli = null; ws.reset();
+      if (c) setTimeout(() => c.end(), 300);
       if (ws.onclose) ws.onclose();
     },
   };
@@ -92,9 +139,9 @@ function peerSocket() {
 function connect(then) {
   if (Net.ws && Net.ws.readyState <= 1) { then(); return; }
   const url = coopUrl();
-  if (!url && typeof Peer === 'undefined') { lobbyStatus('Could not load the peer to peer library. Check your connection and reload.'); return; }
+  if (!url && typeof mqtt === 'undefined') { lobbyStatus('Could not load the co-op library. Check your connection and reload.'); return; }
   lobbyStatus(url ? 'Connecting to the co-op server (a sleeping free host can take up to a minute)...' : 'Connecting...');
-  const ws = url ? new WebSocket(url) : peerSocket();
+  const ws = url ? new WebSocket(url) : mqttSocket();
   Net.ws = ws;
   ws.onopen = then;
   ws.onerror = () => lobbyStatus('Could not reach the co-op server.');
