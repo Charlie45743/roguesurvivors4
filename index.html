@@ -362,6 +362,29 @@ button.pane.open:hover { opacity: 1; background: var(--panel2); }
 #dialogue.narr #dlgText { font-style: italic; color: #c9c2e0; text-align: center; }
 #dialogue.narr .dlg { background: rgba(21,19,31,.75); }
 
+#cdlg { position: fixed; left: 0; right: 0; bottom: calc(12vh + 10px); display: flex; justify-content: center; z-index: 30; cursor: pointer; padding: 0 12px; }
+#cdlg.hidden { display: none; }
+#cdPortrait { width: 96px; height: 78px; object-fit: contain; background: var(--void); box-shadow: inset 0 0 0 2px var(--line); flex: none; }
+#cdName { font-family: var(--head); font-size: 16px; letter-spacing: 1px; }
+#cdText { margin: 6px 0 0; font-size: 19px; line-height: 1.4; color: var(--ink); min-height: 54px; }
+#cdlg.narr #cdPortrait { display: none; } #cdlg.narr #cdText { font-style: italic; color: #c9c2e0; text-align: center; }
+#barks { position: fixed; left: 50%; transform: translateX(-50%); bottom: 90px; z-index: 12; display: flex; flex-direction: column; gap: 4px; align-items: center; pointer-events: none; width: min(640px, 92vw); }
+.bark { background: rgba(11,10,18,.78); padding: 5px 12px; font-size: 16px; color: var(--ink); box-shadow: 0 0 0 2px var(--void), 0 0 0 3px var(--line); animation: cardIn .25s; }
+.bark b { font-family: var(--head); letter-spacing: 1px; margin-right: 6px; }
+#ldbars { position: fixed; top: 92px; left: 50%; transform: translateX(-50%); z-index: 11; display: flex; flex-direction: column; gap: 5px; pointer-events: none; width: min(320px, 70vw); }
+.ldbar { position: relative; height: 15px; background: rgba(11,10,18,.8); box-shadow: 0 0 0 2px var(--void), 0 0 0 3px var(--line); overflow: hidden; }
+.ldbar i { position: absolute; inset: 0 auto 0 0; transition: width .2s; }
+.ldbar span { position: relative; z-index: 1; font-family: var(--head); font-size: 11px; letter-spacing: 1px; color: #fff; text-shadow: 0 1px 0 #000; padding-left: 6px; line-height: 15px; }
+#storyHead { text-align: center; color: var(--dim); font-size: 15px; margin: -4px 0 6px; min-height: 22px; }
+.ldlist { max-height: 62vh; overflow-y: auto; padding: 6px; }
+.ldlist .card.char .cast { display: flex; gap: 4px; margin-top: 6px; }
+.ldlist .card.char .cast img { width: 28px; height: 24px; object-fit: contain; background: var(--void); }
+.ldlist .card.char .cur { color: var(--gold); font-family: var(--head); font-size: 12px; letter-spacing: 1px; }
+#credits { position: fixed; inset: 0; background: #000; z-index: 60; overflow: hidden; display: flex; justify-content: center; }
+#credits.hidden { display: none; }
+#creditsRoll { position: absolute; top: 100%; width: min(560px, 90vw); text-align: center; color: #f2eee6; font-family: var(--head); letter-spacing: 3px; line-height: 2.2; animation: croll 46s linear forwards; }
+#creditsRoll h3 { color: var(--gold); font-size: 30px; margin: 40px 0 6px; } #creditsRoll p { margin: 0; color: #c9c2e0; font-size: 18px; } #creditsRoll h4 { color: var(--dim); font-size: 15px; margin: 34px 0 0; }
+@keyframes croll { to { top: -190%; } }
 #err { position: fixed; left: 8px; bottom: 8px; right: 8px; color: #ff8a8a; font: 12px monospace; z-index: 99; white-space: pre-wrap; pointer-events: none; }
 
 @media (max-width: 640px) {
@@ -395,6 +418,10 @@ button.pane.open:hover { opacity: 1; background: var(--panel2); }
 <div id="dpad" class="hidden"><button class="btn ghost" data-act="roll">Roll</button><button class="btn ghost" data-act="jump">Jump</button><button class="btn" data-act="attack">Hit</button></div>
 <div id="fade"></div>
 <div id="titlecard"></div>
+<div id="cdlg" class="hidden"><div class="dlg"><img id="cdPortrait" alt=""><div class="dlg-text"><div id="cdName"></div><p id="cdText"></p><span class="dlg-next">Click or Enter · Esc skips</span></div></div></div>
+<div id="barks"></div>
+<div id="ldbars"></div>
+<div id="credits" class="hidden"><div id="creditsRoll"></div></div>
 <div id="banner"><div id="bannerT"></div><div id="bannerS"></div></div>
 <button id="mute" class="btn ghost mutebtn">Sound on</button>
 
@@ -468,10 +495,11 @@ button.pane.open:hover { opacity: 1; background: var(--panel2); }
 </section>
 
 <section id="story" class="screen hidden">
-  <h2>The Long Night</h2>
-  <p class="sub">Six wanderers. One stolen sun.</p>
-  <div id="storyList" class="cards"></div>
-  <button class="btn ghost" data-back>Back</button>
+  <h2>THE LAST DAWN</h2>
+  <p class="sub">Thirty-seven days beneath a dead sky.</p>
+  <div id="storyHead"></div>
+  <div id="storyList" class="cards ldlist"></div>
+  <div class="row"><button class="btn ghost" id="btnReplay">Replay a cinematic</button><button class="btn ghost" data-back>Back</button></div>
 </section>
 
 <section id="lobby" class="screen hidden">
@@ -523,29 +551,29 @@ button.pane.open:hover { opacity: 1; background: var(--panel2); }
 window.__errs = [];
 window.addEventListener('error', e => { window.__errs.push(e.message + ':' + e.lineno); document.getElementById('err').textContent += (e.message + ' @' + (e.filename || '').split('/').pop() + ':' + e.lineno + '\n'); });
 </script>
-<script src="js/sprites.js?v=4"></script>
-<script src="js/audio.js?v=4"></script>
-<script src="js/data.js?v=4"></script>
-<script src="js/game.js?v=4"></script>
-<script src="js/art.js?v=4"></script>
-<script src="js/dungeon.js?v=4"></script>
-<script src="js/dungeon2.js?v=4"></script>
-<script src="js/bosses.js?v=4"></script>
-<script src="js/bossfx.js?v=4"></script>
-<script src="js/bossart.js?v=4"></script>
-<script src="js/structures.js?v=4"></script>
-<script src="js/powerups.js?v=4"></script>
-<script src="js/towns.js?v=4"></script>
-<script src="js/dims.js?v=4"></script>
-<script src="js/story.js?v=4"></script>
-<script src="js/allies.js?v=4"></script>
-<script src="js/sites.js?v=4"></script>
-<script src="js/dungeon3.js?v=4"></script>
-<script src="js/world.js?v=4"></script>
+<script src="js/sprites.js?v=5"></script>
+<script src="js/audio.js?v=5"></script>
+<script src="js/data.js?v=5"></script>
+<script src="js/game.js?v=5"></script>
+<script src="js/art.js?v=5"></script>
+<script src="js/dungeon.js?v=5"></script>
+<script src="js/dungeon2.js?v=5"></script>
+<script src="js/bosses.js?v=5"></script>
+<script src="js/bossfx.js?v=5"></script>
+<script src="js/bossart.js?v=5"></script>
+<script src="js/structures.js?v=5"></script>
+<script src="js/powerups.js?v=5"></script>
+<script src="js/towns.js?v=5"></script>
+<script src="js/dims.js?v=5"></script>
+<script src="js/story.js?v=5"></script>
+<script src="js/allies.js?v=5"></script>
+<script src="js/sites.js?v=5"></script>
+<script src="js/dungeon3.js?v=5"></script>
+<script src="js/world.js?v=5"></script>
 <script src="https://cdn.jsdelivr.net/npm/nostr-tools@2.7.2/lib/nostr.bundle.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/5.3.4/mqtt.min.js"></script>
-<script src="js/net.js?v=4"></script>
-<script src="js/local.js?v=4"></script>
-<script src="js/devhooks.js?v=4"></script>
+<script src="js/net.js?v=5"></script>
+<script src="js/local.js?v=5"></script>
+<script src="js/devhooks.js?v=5"></script>
 </body>
 </html>

@@ -1692,10 +1692,11 @@ function drawCrypt(c, now) {
 const PLAYER_COLORS = ['#ffd35a', '#8ff0ff', '#e27bf0', '#a6e05a'];
 function render() {
   if (G) P = ME;
-  if (G && D && (state === 'dungeon' || (state === 'pause' && G.pausedFrom === 'dungeon'))) { renderCryptViews(); drawJoystick(); return; }
+  if (G && D && (state === 'dungeon' || (state === 'pause' && G.pausedFrom === 'dungeon') || (state === 'dialogue' && typeof DLG !== 'undefined' && DLG && DLG.from === 'dungeon'))) { renderCryptViews(); drawJoystick(); return; }
   if (!G || state === 'menu' || state === 'chars' || state === 'altar') { renderMenuBg(); return; }
-  if (G.local && G.players.length > 1) renderSplit(drawScene);
+  if (G.local && G.players.length > 1 && state !== 'cine') renderSplit(drawScene);
   else drawScene();
+  Mods.call('postRender');   // zoom, sky, fades, letterbox
   drawJoystick();
 }
 // The drag stick, shown wherever the mouse or a finger is steering
@@ -1716,6 +1717,7 @@ function drawScene() {
   const sh = G.shake;
   camX = Math.round(P.x - W / 2 + (sh ? rand(-sh, sh) : 0));
   camY = Math.round(P.y - H / 2 + (sh ? rand(-sh, sh) : 0));
+  Mods.call('camera');   // a cutscene can take the camera
   const now = performance.now() / 1000;
 
   drawGround();
@@ -2344,6 +2346,8 @@ function setWho(id, pl, what) {
   el.textContent = w.text; el.style.color = w.color;
 }
 
+// Menus can belong to one player of a shared screen; local co-op vetoes clicks from anyone else (see local.js)
+const menuClickAllowed = () => !Mods.first('menuClickBlocked');
 let luSel = 0;
 // Every level gives every standing player an upgrade of their own. They choose one after another while the rest wait.
 function openLevelUp() {
@@ -2371,7 +2375,7 @@ function renderChoices() {
       <div><div class="name">${info.name}</div><div class="lv ${info.cls || ''}">${info.lv}</div></div></div>
       <div class="desc">${info.desc}</div>
       ${info.hint ? `<div class="hint"><img src="${ICON_URL[info.hintIcon]}" alt="">${info.hint}</div>` : ''}`;
-    b.onclick = () => { if (menuClickOk()) pickChoice(i); };
+    b.onclick = () => { if (menuClickAllowed()) pickChoice(i); };
     b.onmouseenter = () => { if (luSel !== i) { luSel = i; markSel(); Snd.play('hover'); } };
     box.appendChild(b);
   });
@@ -2397,12 +2401,12 @@ function finishLevel() {
   levelShock();
 }
 $('btnReroll').onclick = () => {
-  if (G.rerolls <= 0 || !menuClickOk()) return;
+  if (G.rerolls <= 0 || !menuClickAllowed()) return;
   G.rerolls--; Snd.play('select');
   G.choices = withPlayer(G.chooser || P, () => rollChoices(G.choices.length));
   withPlayer(G.chooser || P, renderChoices);
 };
-$('btnSkip').onclick = () => { if (!menuClickOk()) return; Snd.play('select'); finishLevel(); };
+$('btnSkip').onclick = () => { if (!menuClickAllowed()) return; Snd.play('select'); finishLevel(); };
 
 /* ---------- Chest ---------- */
 const CHEST_URL = (() => {
@@ -2472,7 +2476,7 @@ function revealChest() {
     setTimeout(() => { $('btnChest').disabled = false; }, 300 + rows.length * 250);
   }, 750);
 }
-$('btnChest').onclick = () => { if (menuClickOk()) revealChest(); };
+$('btnChest').onclick = () => { if (menuClickAllowed()) revealChest(); };
 
 /* ---------- Pause ---------- */
 function openPause() {

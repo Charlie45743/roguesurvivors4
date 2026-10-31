@@ -329,6 +329,7 @@ Mods.add({
   key(e) { return localKey(e); },
   input() { pollPads(); },
   levelUp() { return openSplitLevelUp(); },
+  menuClickBlocked() { return !menuClickOk(); },
   frame(st, dt) {
     if (st === 'levelup' && G && G.lvDoneT > 0) { G.lvDoneT -= dt; if (G.lvDoneT <= 0) finishSplitLevel(); }
     if (st !== 'localco') return;

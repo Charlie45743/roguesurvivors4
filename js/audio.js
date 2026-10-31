@@ -90,6 +90,15 @@ const Snd = (() => {
     shrine() { tone('sine', 220, 0, 1.4, 0.08); tone('sine', 330, 0, 1.4, 0.06, 0.12); tone('sine', 494, 0, 1.4, 0.05, 0.24); },
     meteor() { if (ok('meteor', 90)) noise(0.3, 0.08, 3000, 0, 'bandpass', sfx, 400); },
     win() { [523, 659, 784, 1047, 784, 1047, 1319, 1568].forEach((f, i) => tone('square', f, 0, 0.3, 0.07, i * 0.12)); },
+    // The Last Dawn
+    bell() { tone('sine', 196, 0, 2.6, 0.14); tone('sine', 392, 0, 2.2, 0.08); tone('sine', 587, 0, 1.6, 0.05); tone('triangle', 233, 0, 2.4, 0.05); },
+    wind() { noise(2.6, 0.07, 500, 0, 'bandpass', sfx, 1400); },
+    rumble() { noise(1.6, 0.22, 180, 0, 'lowpass', sfx, 50); tone('sine', 60, 30, 1.4, 0.25); },
+    crack() { noise(0.5, 0.2, 7000, 0, 'highpass'); tone('sawtooth', 2200, 90, 0.6, 0.08); tone('sine', 70, 30, 0.9, 0.2); },
+    roar() { tone('sawtooth', 110, 55, 1.1, 0.18); tone('sawtooth', 117, 52, 1.1, 0.14); noise(1.1, 0.2, 700, 0, 'lowpass', sfx, 120); },
+    thud() { tone('sine', 120, 40, 0.25, 0.3); noise(0.15, 0.15, 500, 0, 'lowpass'); },
+    sunrise() { [262, 330, 392, 523, 659, 784, 1047].forEach((f, i) => { tone('sine', f, 0, 3.2, 0.06, i * 0.35); tone('triangle', f * 2, 0, 2.4, 0.025, i * 0.35); }); noise(3, 0.04, 6000, 0.5, 'highpass'); },
+    pulse() { tone('sine', 80, 50, 0.6, 0.3); tone('sine', 40, 30, 0.8, 0.3, 0.05); },
   };
 
   /* ---------- Music: Am - F - G - Em, intensity 0 (menu) / 1 (run) / 2 (boss) ---------- */
@@ -113,7 +122,14 @@ const Snd = (() => {
     while (nextT < ac.currentTime + 0.12) {
       const d = Math.max(0, nextT - ac.currentTime);
       const bar = Math.floor(step / 16) % 4, s = step % 16, ch = PROG[bar];
-      if (intensity === 0) {
+      if (intensity === 3 || intensity === 4) {
+        // 3: a slow, wary drone for story scenes. 4: the dawn, warm and open.
+        const warm = intensity === 4, root = warm ? [48, 55, 60, 64] : [45, 52, 57, 60];
+        if (s === 0 && bar % 2 === 0) { bass(mtof(root[0]), d, STEP * 30); tone('sine', mtof(root[1]), 0, STEP * 30, 0.03, d, mus); }
+        if (s === 8 && bar % 2 === 1) tone('sine', mtof(root[2 + (bar >> 1) % 2]), 0, STEP * 20, 0.025, d, mus);
+        if (warm && s % 4 === 0) tone('triangle', mtof(root[(s >> 2) % 4] + 12), 0, STEP * 5, 0.02, d, mus);
+        if (!warm && s === 0 && bar === 3) noise(0.6, 0.04, 400, d, 'lowpass', mus, 120);
+      } else if (intensity === 0) {
         if (s === 0) bass(mtof(ch[0]), d, STEP * 14);
         if (s % 2 === 0) tone('triangle', mtof(ch[1 + (s / 2) % 3] + 12), 0, STEP * 3, 0.03, d, mus);
       } else {
