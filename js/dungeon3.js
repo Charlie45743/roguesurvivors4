@@ -517,3 +517,90 @@ finishCrypt = function () {
     openChest(true, note);
   });
 };
+
+/* ---------- The sword: a slow, heavy swing with real reach ----------
+   A raised wind-up, a sweeping cut that only lands during its active frames, and a recovery. The third strike of a
+   combo is a heavy overhead chop. Hits count once per foe per swing; roll to cancel. */
+const SWORD = { wind: [0.13, 0.22], active: [0.11, 0.15], cd: [0.52, 0.8], range: [38, 48] };
+cryptAttack = function (p) {
+  p.step = D.t - p.lastAtk < 0.95 ? (p.step + 1) % 3 : 0;
+  p.lastAtk = D.t;
+  const big = p.step === 2, i = big ? 1 : 0;
+  p.sw = { t: 0, big, wind: SWORD.wind[i], active: SWORD.active[i], total: SWORD.cd[i], rev: p.step === 1, hit: new Set(), fired: false, range: SWORD.range[i] };
+  p.atkCd = SWORD.cd[i]; p.atkT = SWORD.cd[i] * 0.85;
+  Snd.play('dash');
+};
+function swingHit(p, sw) {
+  const range = sw.range, x0 = p.face > 0 ? p.x - 4 : p.x - range, x1 = x0 + range + 4, y0 = p.y - (sw.big ? 28 : 21), y1 = p.y + 2;
+  const dmg = 22 * P.might * (1 + G.level * 0.04) * (sw.big ? 2.1 : 1.25);
+  let hit = false;
+  for (const e of D.ents) if (!e.dead && !sw.hit.has(e) && boxHit(x0, y0, x1, y1, e)) { sw.hit.add(e); cryptHit(e, dmg, p.face, sw.big); hit = true; }
+  for (const a of D.arrows) if (a.foe && a.x > x0 && a.x < x1 && a.y > y0 && a.y < y1) { a.foe = false; a.vx = -a.vx * 1.3; a.vy = -a.vy * 0.5; Snd.play('frost'); }
+  const inBox = o => o.x > x0 - 3 && o.x < x1 + 3 && o.y > y0 && o.y - 6 < y1;
+  for (const l of D.levers || []) if (!l.on && inBox(l)) {
+    l.on = true; Snd.play('reel'); dburst(l.x, l.y - 6, '#ffd35a', 8, 60);
+    if (D.levers.every(x => x.on)) openGates();
+  }
+  for (const b of D.barrels || []) if (!b.dead && inBox(b)) blowBarrel(b);
+  for (const o of D.ores || []) if (!o.dead && !sw.hit.has(o) && inBox(o)) {
+    sw.hit.add(o); o.hp--; dburst(o.x, o.y - 4, '#8ff0ff', 5, 60); Snd.play('hit');
+    if (o.hp <= 0) { o.dead = true; const g = Math.round(15 * P.greed); G.gold += g; dtext(o.x, o.y - 10, '+' + g, false, '#ffd35a'); D.oreCount = (D.oreCount || 0) + 1; Snd.play('coin'); }
+  }
+  if (hit) { D.hitstop = sw.big ? 0.085 : 0.05; D.shake = Math.max(D.shake, sw.big ? 3.5 : 2); }
+}
+const swordUpdateBase = updateCrypt;
+updateCrypt = function (dt) {
+  const p = DP;
+  if (p && !D.dead) {
+    // a press just before the recovery ends is remembered
+    if (dpress.attack && p.atkCd > 0 && p.atkCd < 0.2) p.atkBuf = 0.22;
+    p.atkBuf = (p.atkBuf || 0) - dt;
+    if (p.atkBuf > 0 && p.atkCd <= 0) { dpress.attack = true; p.atkBuf = 0; }
+    const sw = p.sw;
+    if (sw) {
+      if (p.roll > 0) p.sw = null;
+      else {
+        sw.t += dt;
+        if (sw.t >= sw.wind && sw.t <= sw.wind + sw.active) {
+          if (!sw.fired) { sw.fired = true; Snd.play('slash'); if (p.onGround) p.vx += p.face * (sw.big ? 70 : 45); D.shake = Math.max(D.shake, sw.big ? 2 : 0.8); }
+          swingHit(p, sw);
+        }
+        if (sw.t > sw.total) p.sw = null;
+      }
+    }
+  }
+  swordUpdateBase(dt);
+};
+const swordRenderBase = renderCrypt;
+renderCrypt = function () {
+  swordRenderBase();
+  if (!D || D.dead || !DP) return;
+  const p = DP, sw = p.sw, now = performance.now() / 1000;
+  const REST = -1.15, hx = p.x + p.face * 3 - camX, hy = p.y - 8 - camY, ease = k => 1 - (1 - k) * (1 - k);
+  let a = REST + Math.sin(now * 2) * 0.03, L = 15, trail = null;
+  if (sw) {
+    L = sw.range * 0.88;
+    const raised = sw.big ? -2.75 : -2.25, end = sw.big ? 1.35 : 0.95, from = sw.rev ? end : raised, to = sw.rev ? raised - 0.3 : end;
+    if (sw.t < sw.wind) { const k = ease(sw.t / sw.wind); a = REST + (sw.rev ? end - REST : raised - REST) * k * (sw.rev ? 0.55 : 1); a = sw.rev ? REST + (end - REST) * k : a; }
+    else if (sw.t < sw.wind + sw.active) { const k = (sw.t - sw.wind) / sw.active; a = from + (to - from) * ease(k); trail = [from, a]; }
+    else { const k = Math.min(1, (sw.t - sw.wind - sw.active) / (sw.total - sw.wind - sw.active)); a = to + (REST - to) * k * k; if (k < 0.35) trail = [from, to]; }
+  }
+  const ang = r => (p.face > 0 ? r : Math.PI - r);
+  if (trail) {
+    const [t0, t1] = trail, steps = 18;
+    for (let i = 0; i < steps; i++) {
+      const r = t0 + (t1 - t0) * i / steps, fade = i / steps;
+      ctx.globalAlpha = 0.18 + fade * 0.55;
+      for (let rr = L - 6; rr <= L + 2; rr += 2) { ctx.fillStyle = rr > L - 1 ? '#ffffff' : rr > L - 3 ? '#ffd35a' : '#e8742c'; ctx.fillRect(Math.round(hx + Math.cos(ang(r)) * rr), Math.round(hy + Math.sin(ang(r)) * rr * 0.9), 2, 1); }
+    }
+    ctx.globalAlpha = 1;
+  }
+  const A = ang(a), cx = Math.cos(A), cy = Math.sin(A), tx = hx + cx * L, ty = hy + cy * L;
+  pxLine(hx, hy, tx, ty, '#0b0a12', 4);
+  pxLine(hx + cx * 3, hy + cy * 3, tx, ty, '#aeb6cc', 2);
+  pxLine(hx + cx * 4, hy + cy * 4, tx - cx * 2, ty - cy * 2, '#ffffff', 1);
+  const gx = hx + cx * 3, gy = hy + cy * 3;
+  pxLine(gx - cy * 3, gy + cx * 3, gx + cy * 3, gy - cx * 3, '#ffd35a', 1);
+  ctx.fillStyle = '#5a3a28'; ctx.fillRect(Math.round(hx - cx) , Math.round(hy - cy), 2, 2);
+  if (sw && sw.t >= sw.wind && sw.t < sw.wind + sw.active) { ctx.fillStyle = '#ffffff'; ctx.fillRect(Math.round(tx) - 1, Math.round(ty) - 1, 3, 3); }
+};

@@ -190,7 +190,7 @@ function drawMap(now) {
   for (const s of G.shrines || []) if (seenAt(s.x, s.y) && s.uses > 0) mark(s.x, s.y, 3, '#e27bf0', s.kind && SHRINE_KINDS[s.kind] ? SHRINE_KINDS[s.kind].name : 'Shrine of Fortune', 'Make an offering', '', 1, 'dia');
   for (const c of G.crypts || []) mark(c.x, c.y, 3, '#e8742c', 'Crypt entrance', 'Treasure waits below', '', 1, 'dia');
   for (const p of G.portals || []) mark(p.x, p.y, 4, p.dim === 'home' ? '#ffd35a' : DIMS[p.dim].color, p.dim === 'home' ? 'Golden portal' : 'Portal to ' + DIMS[p.dim].name, 'Step through', '', 1, 'dia');
-  if (G.spawner && !G.spawner.on && G.dim) mark(G.spawner.x, G.spawner.y, 5, DIMS[G.dim].color, 'The guardians seal', 'Break it to wake the guardian', '', 1, 'dia');
+  if (G.spawner && !G.spawner.on) mark(G.spawner.x, G.spawner.y, 6, DIMS[G.spawner.dim].color, 'Boss portal', 'Find it. Open it. Kill the boss within the time limit', '', 1, 'dia');
   for (const e of G.enemies) if (e.boss && !e.dead) mark(e.x, e.y, 5, '#d8354a', e.name || 'Guardian', 'A boss', '', 1, 'dia');
   for (const a of G.allies || []) if (!a.gone) mark(a.x, a.y, 2, a.down ? '#ffd35a' : '#a6e05a', a.name, a.down ? 'Down. Help them up' : 'Your companion', '');
   for (const pl of G.players) if (pl !== ME) mark(pl.x, pl.y, 3, '#3f8ee0', 'Your partner', '', '');

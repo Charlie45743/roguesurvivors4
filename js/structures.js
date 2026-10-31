@@ -838,9 +838,7 @@ const structName = st => st.name || (st.name = STRUCT_TITLE[st.type][0](NAME_A[(
 const baseActivate = activateStruct;
 activateStruct = function (st) {
   baseActivate(st);
-  G.discovered = (G.discovered || 0) + 1;
-  banner(structName(st), STRUCT_TITLE[st.type][1], st.ruined ? '#a59cc4' : STRUCT_COL[st.type]);
-  Snd.play('shrine');
+  G.discovered = (G.discovered || 0) + 1; // places are no longer announced; names show on the map and as you walk up
 };
 function fog(x, y, r, now, seed, col = 'rgba(165,156,196,0.07)') {
   for (let i = 0; i < 5; i++) {

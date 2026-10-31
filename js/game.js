@@ -475,11 +475,13 @@ function runEvent(ev) {
       banner(ev.n > 1 ? 'Hollow Knights approach' : 'A Hollow Knight approaches', 'It carries treasure', '#ffd35a');
       break;
     case 'warn':
+      if (!G.story) break; // the boss now comes from the boss portal
       Snd.play('warn');
       G.shake = Math.max(G.shake, 3);
       banner('Warning', BOSSES[ev.tier].name + ' stirs', '#d8354a');
       break;
     case 'boss':
+      if (!G.story) break;
       spawnBoss(ev.tier);
       G.final = ev.tier === BOSSES.length - 1 ? G.boss : G.final;
       banner(BOSSES[ev.tier].name, ev.tier === 2 ? 'Destroy it before dawn' : 'Slay it for great treasure', '#d8354a');
@@ -2149,9 +2151,9 @@ function updateHud() {
   const set = (id, v) => { if (hudLast[id] !== v) { hudLast[id] = v; $(id).textContent = v; } };
   $('xpfill').style.width = `calc(${clamp(G.xp / G.xpNext, 0, 1) * 100}% - 4px)`;
   set('lvl', 'LV ' + G.level);
-  const chainClock = G.dim && !G.story && G.dimPhase !== 'done' && G.dimLeft !== undefined;
-  set('timer', chainClock ? fmtTime(dimClock()) : fmtTime(G.t));
-  if (chainClock) $('timer').classList.toggle('boss', G.dimLeft < 60 || !!G.boss);
+  const L = typeof levelLeft === 'function' ? levelLeft() : null, chainClock = L !== null && L !== undefined && !G.story;
+  set('timer', fmtTime(chainClock ? (G.dimPhase === 'done' ? Math.max(0, G.advanceT || 0) : dimClock()) : G.t));
+  if (chainClock) $('timer').classList.toggle('boss', (L < 60 && G.dimPhase !== 'done') || !!G.boss);
   set('kills', G.kills);
   set('goldc', G.gold);
   const bk = Object.keys(G.buffs).filter(k => G.buffs[k] > 0).map(k => k + Math.ceil(G.buffs[k])).join();

@@ -55,7 +55,8 @@ const DIMS = {
   island: { name: 'The Drowned Isle', mul: 4.2, color: '#3f8ee0', boss: 'leviathan', relic: 'crown', dark: 0.9, enemies: {}, chainEnemies: { hound: 2, imp: 2, crawler: 1.5, stalker: 1 }, sub: 'Danger x4.2. Two titans rule this island' },
   demon: { name: 'The Demon Realm', mul: 3.6, color: '#d8354a', boss: 'archfiend', relic: 'demonHorn', dark: 1.3, enemies: { imp: 3, hound: 3, stalker: 1 }, sub: 'Danger x3.6. Its master waits' },
 };
-const PORTAL_TIMES = [[200, 'frozen']]; // the first portal opens the chain: frozen > rift > void > demon > island
+const PORTAL_TIMES = [[200, 'frozen']];
+DIMS.world = { name: 'The Island', mul: 1, color: '#ffd35a', boss: 'colossus', relic: 'templeIdol', dark: 0, enemies: {}, sub: '' };
 const isleBiome = (x, y) => (x * x / (ISLAND_R * ISLAND_R) + y * y / (ISLAND_R * ISLAND_R * 0.64) < 1 ? 'isle' : 'sea');
 
 function spawnPortal(dim, x, y) {
@@ -148,7 +149,14 @@ function exitDimension() {
     Mods.call('leftDim', dim);
   }, 350);
 }
+function worldBoss(px, py, enraged) {
+  G.dimPhase = 'boss';
+  const [x, y] = px !== undefined ? [px, py] : edgePos(30);
+  const b = makeBoss('colossus', x, y, { hpMul: 1.8, dmgMul: enraged ? 1.25 : 1, onDeath: e => dimBossDown(e) });
+  banner(b.name, 'Slay it before time runs out', DIMS.world.color); Snd.play('warn');
+}
 function dimBoss(px, py, enraged) {
+  if (!G.dim) { worldBoss(px, py, enraged); return; }
   const def = DIMS[G.dim];
   const ids = G.dim === 'island' ? ['leviathan', 'herald'] : [def.boss];
   const id = ids[G.dimBossIdx];
@@ -208,9 +216,7 @@ Mods.add({
   update(dt) {
     for (const p of G.portals) { p.t += dt; if (p.dim !== 'home') p.life -= dt; }
     G.portals = G.portals.filter(p => p.life > 0);
-    if (!G.dim && !G.story?.noPortals) {
-      if (!G.chainStarted && G.t >= (G.nextPortalT ?? PORTAL_TIMES[0][0]) && !G.boss && !G.portals.some(p => p.dim !== 'home')) { spawnPortal(PORTAL_TIMES[0][1]); G.nextPortalT = G.t + 160; }
-    }
+    if (!G.dim && !G.story) worldLevelStep(dt);
     if (!G.dim) return;
     for (const w of G.wells) {
       w.t -= dt;
@@ -239,22 +245,22 @@ Mods.add({
     return true;
   },
   promptLabel() {
-    if (nearSpawner(ME)) return 'E · Break the seal';
+    if (nearSpawner(ME)) return 'E · Open the boss portal';
     const p = nearPortal(ME);
     return p ? (p.dim === 'home' ? 'E · Return to the night' : 'E · ' + DIMS[p.dim].name) : '';
   },
   ents(list) {
     for (const p of G.portals) if (onScreen(p.x, p.y, 40)) list.push(p);
     const s = G.spawner;
-    if (s && G.dim && onScreen(s.x, s.y, 50)) list.push({ sortY: s.y + 6, y: s.y, x: s.x, draw: now => drawSpawner(s, now) });
+    if (s && onScreen(s.x, s.y, 50)) list.push({ sortY: s.y + 6, y: s.y, x: s.x, draw: now => drawSpawner(s, now) });
   },
   pointers(list) {
     const s = G.spawner;
-    if (s && !s.on && G.dim && !onScreen(s.x, s.y - 10, 10)) list.push({ x: s.x, y: s.y, pcolor: DIMS[G.dim].color, picon: ICON.skull });
+    if (s && !s.on && !onScreen(s.x, s.y - 10, 10)) list.push({ x: s.x, y: s.y, pcolor: DIMS[s.dim].color, picon: ICON.skull });
     for (const p of G.portals) if (!onScreen(p.x, p.y - 14, 10)) list.push({ x: p.x, y: p.y, pcolor: p.dim === 'home' ? '#ffd35a' : DIMS[p.dim].color, picon: ICON.nova }); },
   minimap(dot) {
     for (const p of G.portals) dot(p.x, p.y, p.dim === 'home' ? '#ffd35a' : DIMS[p.dim].color, 3);
-    if (G.spawner && !G.spawner.on && G.dim) dot(G.spawner.x, G.spawner.y, Math.floor(performance.now() / 250) % 2 ? '#ffffff' : DIMS[G.dim].color, 4);
+    if (G.spawner && !G.spawner.on) dot(G.spawner.x, G.spawner.y, Math.floor(performance.now() / 250) % 2 ? '#ffffff' : DIMS[G.spawner.dim].color, 5);
   },
   drawGround(now) {
     if (G.dim === 'island') {
@@ -282,15 +288,17 @@ Mods.add({
       ctx.fillStyle = '#e8742c';
       for (let i = 0; i < 30; i++) { const x = (i * 71) % W, y = H - ((now * 25 + i * 37) % H); ctx.fillRect(Math.round(x + Math.sin(now + i) * 6), Math.round(y), 1, 1); }
     } else if (G.dim === 'void') { ctx.fillStyle = 'rgba(80,20,120,0.1)'; ctx.fillRect(0, 0, W, H); }
-    if (G.dim) {
-      const def = DIMS[G.dim];
-      let txt = '', col = def.color;
+    const lvl = G.dim || (!G.story && (G.spawner || G.dimPhase) ? 'world' : null);
+    if (lvl) {
+      const def = DIMS[lvl], left = levelLeft();
+      let txt = '', sub = '', col = def.color;
       if (G.story) txt = G.dimPhase === 'survive' && G.dim !== 'island' ? `GUARDIAN IN ${Math.max(0, Math.ceil(45 - G.dimT))}` : G.dimPhase === 'done' ? 'FIND THE GOLDEN PORTAL' : '';
-      else if (G.dimLeft <= 0 && G.dimPhase !== 'done') { txt = 'THE DIMENSION IS COLLAPSING'; col = Math.floor(now * 4) % 2 ? '#ff6a7a' : '#ffffff'; }
-      else if (G.dimPhase === 'survive') txt = 'GEAR UP - BREAK THE SEAL';
-      else if (G.dimPhase === 'boss') txt = 'SLAY THE GUARDIAN';
-      else if (G.dimPhase === 'done' && G.advanceT > 0) txt = `NEXT DIMENSION IN ${Math.ceil(G.advanceT)}`;
+      else if (G.dimPhase === 'done') { if (G.advanceT > 0 && G.nextDim) txt = `NEXT LEVEL IN ${Math.ceil(G.advanceT)}`; }
+      else if (left !== null && left <= 0) { txt = 'THE LEVEL IS COLLAPSING - KILL THE BOSS'; col = Math.floor(now * 4) % 2 ? '#ff6a7a' : '#ffffff'; }
+      else if (G.dimPhase === 'boss') txt = 'KILL THE BOSS BEFORE TIME RUNS OUT';
+      else { txt = 'FIND THE BOSS PORTAL AND KILL IT WITHIN 8 MINS'; if (G.spawner && !G.spawner.on) sub = `BOSS PORTAL ${Math.round(Math.hypot(G.spawner.x - ME.x, G.spawner.y - ME.y) / 8)} M`; }
       if (txt) drawText(ctx, txt, W / 2, 44, col, 1);
+      if (sub) drawText(ctx, sub, W / 2, 55, '#ffffff', 1);
     }
   },
 });
@@ -300,13 +308,19 @@ Mods.add({
    its foes), break it, and kill what answers. The way to the next dimension opens, and so on to the Drowned Isle's two
    titans. When the clock runs out first, the dimension collapses and the guardian comes for you, enraged. */
 const DIM_CHAIN = ['frozen', 'rift', 'void', 'demon', 'island'];
+const LEVEL_CHAIN = ['world', ...DIM_CHAIN];
+const LEVEL_TIME = 480;
+function levelLeft() { if (G.story) return null; if (G.dim) return G.dimLeft; return G.dimPhase ? LEVEL_TIME - G.t : null; }
 const DIM_TIME = { frozen: 480, rift: 480, void: 480, demon: 480, island: 480 }; // eight minutes to gear up and slay the guardian
 const COLLAPSE_GRACE = 60; // after the clock hits zero the dimension has one more minute to live
-const dimClock = () => (G.dimLeft > 0 ? G.dimLeft : COLLAPSE_GRACE + G.dimLeft);
+const dimClock = () => { const l = levelLeft(); return l > 0 ? l : COLLAPSE_GRACE + l; };
 
 function placeSpawner(dim) {
   let x, y;
-  if (dim === 'island') { x = -ISLAND_R * 0.4; y = ISLAND_R * 0.12; }
+  if (dim === 'world') {
+    for (let i = 0; i < 30; i++) { const a = rand(0, TAU), R = rand(1500, 2300); x = Math.cos(a) * R; y = Math.sin(a) * R; if (coastK(x, y) < 0.7) break; }
+    G.dimPhase = 'survive';
+  } else if (dim === 'island') { x = -ISLAND_R * 0.4; y = ISLAND_R * 0.12; }
   else { const a = rand(0, TAU), R = rand(750, 1100); x = Math.cos(a) * R; y = Math.sin(a) * R * 0.8; }
   ensureChunks(x, y);
   const f = { x, y };
@@ -315,18 +329,18 @@ function placeSpawner(dim) {
 }
 function nearSpawner(pl) {
   const s = G && G.spawner;
-  return s && !s.on && G.dim && G.dimPhase === 'survive' && pl && Math.hypot(s.x - pl.x, s.y - (pl.y + 6)) < 26 ? s : null;
+  return s && !s.on && G.dimPhase === 'survive' && pl && Math.hypot(s.x - pl.x, s.y - (pl.y + 6)) < 30 ? s : null;
 }
 function guardSpawner(s) {
   s.guarded = true;
-  const def = DIMS[G.dim], pool = Object.keys(def.enemies).length ? def.enemies : def.chainEnemies, n = 9 + DIM_CHAIN.indexOf(G.dim) * 2;
+  const lv = G.dim || 'world', def = DIMS[lv], pool = def.chainEnemies || (Object.keys(def.enemies).length ? def.enemies : { ghoul: 3, skel: 3, wraith: 2, eye: 1 }), n = 9 + Math.max(0, LEVEL_CHAIN.indexOf(lv)) * 2;
   for (let i = 0; i < n; i++) { const a = i / n * TAU, e = spawnEnemy(weighted(pool), s.x + Math.cos(a) * 70, s.y + Math.sin(a) * 52); e.rise = 0.5; }
-  banner('The seal is guarded', 'Cut through its keepers', DIMS[G.dim].color);
+  banner('The boss portal is guarded', 'Cut through its keepers', DIMS[s.dim].color);
 }
 function activateSpawner(s) {
   s.on = true;
   G.shake = 8; G.whiteFlash = 0.4; Snd.play('bigboom');
-  for (let i = 0; i < 3; i++) G.fx.push({ k: 'ring', x: s.x, y: s.y, t: -i * 0.12, dur: 0.6, r: 40 + i * 28, c: DIMS[G.dim].color });
+  for (let i = 0; i < 3; i++) G.fx.push({ k: 'ring', x: s.x, y: s.y, t: -i * 0.12, dur: 0.6, r: 40 + i * 28, c: DIMS[s.dim].color });
   dimBoss(s.x, s.y - 30);
 }
 function collapseDimension() {
@@ -342,25 +356,32 @@ function crushParty() {
   G.over = true; G.deathT = 2; G.slowT = 2;
   for (const p of G.players) burst(p.x, p.y, '#d8354a', 30, 90);
 }
+function worldLevelStep(dt) {
+  if (!G.spawner && !G.dimPhase && G.t > 0.1) placeSpawner('world');
+  if (G.dimPhase === 'done') {
+    if (G.nextDim) { G.advanceT -= dt; if (G.advanceT <= 0 && state === 'play') { const n = G.nextDim; G.nextDim = null; enterDimension(n); } }
+    return;
+  }
+  const left = LEVEL_TIME - G.t, sp = G.spawner;
+  if (G.dimPhase === 'survive' && sp && !sp.guarded && G.players.some(p => Math.hypot(p.x - sp.x, p.y - sp.y) < 340)) guardSpawner(sp);
+  if (left <= 0 && !G.dimEnraged) collapseDimension();
+  if (left <= -COLLAPSE_GRACE && !G.over) crushParty();
+}
 function drawSpawner(s, now) {
   const col = DIMS[s.dim].color, sx = s.x - camX, sy = s.y - camY, live = !s.on;
-  shadow(s.x, s.y + 6, 22);
-  pxDisc(sx, sy + 4, 20, '#0b0a12', 0.5);
-  pxDisc(sx, sy + 4, 17, live ? 'rgba(40,20,60,0.9)' : 'rgba(40,40,40,0.9)', 0.5);
-  ctx.globalAlpha = live ? 0.55 + Math.sin(now * 3) * 0.25 : 0.25;
-  ringOval(sx, sy + 4, 18, col, 0.5, 2); ringOval(sx, sy + 4, 11 + Math.sin(now * 2) * 2, col, 0.5);
+  shadow(s.x, s.y + 6, 26);
+  pxDisc(sx, sy + 4, 24, '#0b0a12', 0.5);
+  pxDisc(sx, sy + 4, 21, live ? 'rgba(50,16,28,0.92)' : 'rgba(40,40,40,0.9)', 0.5);
+  ctx.globalAlpha = live ? 0.6 + Math.sin(now * 3) * 0.25 : 0.25;
+  ringOval(sx, sy + 4, 22, col, 0.5, 2); ringOval(sx, sy + 4, 14 + Math.sin(now * 2) * 2, col, 0.5);
   ctx.globalAlpha = 1;
-  for (const dx of [-12, 12]) { ctx.fillStyle = '#0b0a12'; ctx.fillRect(Math.round(sx + dx) - 2, Math.round(sy) - 6, 5, 12); ctx.fillStyle = '#5e557f'; ctx.fillRect(Math.round(sx + dx) - 1, Math.round(sy) - 5, 3, 10); }
-  ctx.fillStyle = '#0b0a12'; ctx.fillRect(Math.round(sx) - 4, Math.round(sy) - 6, 9, 11);
-  ctx.fillStyle = '#36304f'; ctx.fillRect(Math.round(sx) - 3, Math.round(sy) - 5, 7, 9);
-  const bob = Math.round(Math.sin(now * 3) * 2);
   if (live) {
-    const cy = Math.round(sy) - 14 + bob;
-    ctx.fillStyle = '#0b0a12'; ctx.fillRect(Math.round(sx) - 3, cy - 4, 7, 9); ctx.fillRect(Math.round(sx) - 2, cy - 5, 5, 11);
-    ctx.fillStyle = col; ctx.fillRect(Math.round(sx) - 2, cy - 3, 5, 7); ctx.fillStyle = '#fff'; ctx.fillRect(Math.round(sx), cy - 2, 1, 3);
-    light(s.x, s.y - 12, 70, 1); glowAt(s.x, s.y - 12, 26, col, 0.55);
-    if (Math.random() < 0.4) addPart(s.x + rand(-10, 10), s.y - 4, 0, rand(-26, -10), 0.7, col);
-    if (nearSpawner(ME) && Math.floor(now * 3) % 2) drawText(ctx, 'E', sx, sy - 30, '#ffd35a');
+    drawPortal({ dim: s.dim, x: s.x, y: s.y - 4, t: 99 }, now);
+    ctx.globalAlpha = 0.8; ringOval(sx, sy - 22, 17, col, 1.5, 2); ctx.globalAlpha = 1;
+    light(s.x, s.y - 14, 90, 1); glowAt(s.x, s.y - 16, 34, col, 0.6);
+    if (Math.random() < 0.5) addPart(s.x + rand(-12, 12), s.y - 4, 0, rand(-34, -12), 0.9, col);
+    drawText(ctx, 'BOSS PORTAL', sx, sy - 48 + Math.round(Math.sin(now * 3) * 2), '#ffffff');
+    if (nearSpawner(ME) && Math.floor(now * 3) % 2) drawText(ctx, 'E', sx, sy - 60, '#ffd35a');
   } else light(s.x, s.y, 24, 0.4);
 }
 
@@ -407,10 +428,10 @@ dimDirector = function (dt) {
 const storyDimBossDown = dimBossDown;
 dimBossDown = function (e) {
   if (G.story || (G.dim === 'island' && G.dimBossIdx === 0)) { storyDimBossDown(e); return; }
-  const def = DIMS[G.dim], idx = DIM_CHAIN.indexOf(G.dim), next = DIM_CHAIN[idx + 1];
+  const lv = G.dim || 'world', def = DIMS[lv], idx = LEVEL_CHAIN.indexOf(lv), next = LEVEL_CHAIN[idx + 1];
   G.dimPhase = 'done';
   for (const o of G.enemies) if (!o.dead && !o.prop) o.dawn = rand(0.2, 1.5);
-  const x = clamp(e.x, -ISLAND_R * 0.6, ISLAND_R * 0.6), y = clamp(e.y, -ISLAND_R * 0.5, ISLAND_R * 0.5);
+  const x = G.dim ? clamp(e.x, -ISLAND_R * 0.6, ISLAND_R * 0.6) : e.x, y = G.dim ? clamp(e.y, -ISLAND_R * 0.5, ISLAND_R * 0.5) : e.y;
   const chests = (next ? 1 : 3) + (idx >= 2 ? 1 : 0);
   for (let i = 0; i < chests; i++) dropAt('chest', x + (i - (chests - 1) / 2) * 20, y, { boss: true });
   dropRelic(def.relic, x, y + 20);
