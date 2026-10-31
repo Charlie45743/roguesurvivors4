@@ -486,12 +486,12 @@ function runEvent(ev) {
 }
 
 function director(dt) {
-  const minute = G.t / 60, m = Math.min(WAVES.length - 1, Math.floor(minute));
+  const minute = G.t / 60, m = Math.min(WAVES.length - 1, Math.floor(minute * 0.8));
   G.hpMul = 1 + minute * 0.16 + minute * minute * 0.011;
   while (G.evIdx < EVENTS.length && G.t >= EVENTS[G.evIdx].t) runEvent(EVENTS[G.evIdx++]);
   if (G.won) return;
-  const wave = WAVES[m], cap = Math.min(650, 110 + m * 38);
-  G.spawnAcc += wave.rate * 0.8 * (G.boss ? 0.45 : 1) * (G.spawnMul || 1) * dt;
+  const wave = WAVES[m], cap = Math.min(650, 80 + m * 32);
+  G.spawnAcc += wave.rate * 0.65 * (G.boss ? 0.45 : 1) * (G.spawnMul || 1) * dt;
   while (G.spawnAcc >= 1) {
     G.spawnAcc--;
     if (G.mobs < cap) { const [x, y] = edgePos(); spawnEnemy(weighted(wave.types), x, y); }

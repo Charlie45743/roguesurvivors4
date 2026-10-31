@@ -50,17 +50,18 @@ function mqttSocket() {
     readyState: 0, onopen: null, onerror: null, onclose: null, onmessage: null, cli: null, base: '', gid: '', guest: null, role: null, timer: 0, gen: 0,
     emit(m) { if (ws.onmessage) ws.onmessage({ data: JSON.stringify(m) }); },
     fail(msg) { ws.emit({ t: 'error', msg }); ws.close(); },
-    reset() { ws.gen++; clearTimeout(ws.timer); if (ws.cli) { ws.cli.end(true); ws.cli = null; } ws.guest = null; ws.role = null; },
+    errs: [],
+    reset() { ws.gen++; ws.errs = []; clearTimeout(ws.timer); if (ws.cli) { ws.cli.end(true); ws.cli = null; } ws.guest = null; ws.role = null; },
     pub(topic, str, retain) { if (ws.cli) ws.cli.publish(topic, str, { qos: 0, retain: !!retain }); },
     /* Connect to the first broker that answers, then hand the client to `use`. Stale attempts (gen changed) are dropped. */
     open(will, use, i = 0) {
       const gen = ws.gen;
-      if (i >= BROKERS.length) { ws.fail('Could not reach the co-op service. Check your connection or try again in a minute.'); return; }
+      if (i >= BROKERS.length) { ws.fail('Could not reach the co-op service (' + ws.errs.join('; ') + '). Your network may be blocking it. Try another connection, such as a phone hotspot.'); return; }
       const cli = mqtt.connect(BROKERS[i], { reconnectPeriod: 0, connectTimeout: 7000, keepalive: 15, clean: true, will });
       let done = false;
-      const next = () => { if (done || gen !== ws.gen) return; done = true; cli.end(true); ws.open(will, use, i + 1); };
-      cli.on('error', next);
-      cli.on('close', () => { if (!done) next(); else if (gen === ws.gen && ws.cli === cli) ws.close(); });
+      const next = why => { if (done || gen !== ws.gen) return; done = true; ws.errs.push(BROKERS[i].split('/')[2] + ' ' + why); console.warn('co-op broker failed:', BROKERS[i], why); cli.end(true); ws.open(will, use, i + 1); };
+      cli.on('error', e => next(e && e.message || 'error'));
+      cli.on('close', () => { if (!done) next('connection closed'); else if (gen === ws.gen && ws.cli === cli) ws.close(); });
       cli.on('connect', () => { if (done || gen !== ws.gen) { if (!done) { done = true; cli.end(true); } return; } done = true; ws.cli = cli; use(cli, i); });
       cli.on('message', (topic, buf) => { if (gen === ws.gen) ws.onTopic(topic, buf.toString()); });
     },
@@ -212,6 +213,8 @@ function hostMsg(d) {
       else if (d.cleared) {
         if (d.relic) dropRelic(d.relic, g.x + 14, g.y);
         if (d.frag) dropFragment(g.x - 14, g.y);
+        for (let i = 0; i < (d.deep || 0); i++) dropAt('chest', g.x + 18 * (i + 1), g.y + 10, { boss: true });
+        for (const t of d.rescued || []) if (ALLY_TYPES[t]) recruit(t, g);
         Mods.call('remoteChest', g, true);
       }
       release();
@@ -295,7 +298,9 @@ function snapshot() {
   const inView = (x, y) => Math.abs(x - vx) < mx && Math.abs(y - vy) < my;
   const s = {
     t: 'snap',
-    g: [r1(G.t), G.level, r1(G.xp), G.xpNext, G.kills, G.gold, G.dim, G.dimPhase || '', r1(G.dimT || 0), G.won ? 1 : 0, G.over ? 1 : 0, r1(G.shake), G.fragments || 0, G.darkMul || 0],
+    g: [r1(G.t), G.level, r1(G.xp), G.xpNext, G.kills, G.gold, G.dim, G.dimPhase || '', r1(G.dimT || 0), G.won ? 1 : 0, G.over ? 1 : 0, r1(G.shake), G.fragments || 0, G.darkMul || 0, r1(G.dimLeft || 0), r1(G.advanceT || 0)],
+    al: (G.allies || []).map(a => [a.id, a.type, r1(a.x), r1(a.y), a.face, a.moving ? 1 : 0, r1(a.anim), Math.round(a.hp), a.maxHp, a.down ? 1 : 0, r1(a.reviveT)]),
+    sp: G.spawner ? [r1(G.spawner.x), r1(G.spawner.y), G.spawner.on ? 1 : 0, G.spawner.dim] : null,
     bf: G.buffs,
     pl: G.players.map(p => [r1(p.x), r1(p.y), r1(p.hp), p.maxHp, p.face, p.moving ? 1 : 0, r1(p.anim), p.down ? 1 : 0, r1(p.reviveT), r1(p.inv), p.ch.id, r1(p.hurtT || 0), wvis(p)]),
     me: { might: g.might, armor: g.armor, luck: g.luck, greed: g.greed, blood: g.blood, maxHp: g.maxHp, magnet: g.magnet, passives: g.passives, relics: g.relics || [] },
@@ -353,7 +358,7 @@ function startGuest(d) {
   D = null; DP = null;
   G = {
     remote: true, t: 0, enemies: [], projs: [], bullets: [], gems: [], items: [], parts: [], texts: [], fx: [], pools: [], totems: [], shrines: [], crypts: [], portals: [], hazards: [], wells: [],
-    level: 1, xp: 0, xpNext: 5, kills: 0, gold: 0, shake: 0, slowT: 0, hurtFlash: 0, whiteFlash: 0, boss: null, buffs: {}, players: [], coop: { role: 'guest' },
+    allies: [], level: 1, xp: 0, xpNext: 5, kills: 0, gold: 0, shake: 0, slowT: 0, hurtFlash: 0, whiteFlash: 0, boss: null, buffs: {}, players: [], coop: { role: 'guest' },
     seed: d.seed, dim: null, won: false, over: false, winT: 0, choices: [], rerolls: 0, fragments: 0, keys: {}, revivals: 0, shrineCost: 25,
   };
   Object.defineProperties(G, { weapons: { get: () => P.weapons }, passives: { get: () => P.passives }, ch: { get: () => P.ch }, p: { get: () => ME } });
@@ -368,9 +373,17 @@ function startGuest(d) {
 }
 let lastBuild = '';
 function applySnap(s) {
-  const [t, level, xp, xpNext, kills, gold, dim, dimPhase, dimT, won, over, shake, frags, darkMul] = s.g;
+  const [t, level, xp, xpNext, kills, gold, dim, dimPhase, dimT, won, over, shake, frags, darkMul, dimLeft, advanceT] = s.g;
   if (dim !== G.dim) { G.dim = dim; biomeOverride = dim ? (dim === 'island' ? isleBiome : () => dim) : null; resetWorldCache(); }
-  Object.assign(G, { t, level, xp, xpNext, kills, gold, dimPhase, dimT, won: !!won, shake: Math.max(G.shake, shake), fragments: frags, darkMul: darkMul || null, buffs: s.bf });
+  Object.assign(G, { t, level, xp, xpNext, kills, gold, dimPhase, dimT, won: !!won, shake: Math.max(G.shake, shake), fragments: frags, darkMul: darkMul || null, buffs: s.bf, dimLeft, advanceT });
+  G.spawner = s.sp ? { x: s.sp[0], y: s.sp[1], on: !!s.sp[2], dim: s.sp[3] } : null;
+  const keepAl = new Map((G.allies || []).map(a => [a.id, a]));
+  G.allies = (s.al || []).map(([id, type, x, y, face, moving, anim, hp, maxHp, down, reviveT]) => {
+    const a = keepAl.get(id) || { id, isAlly: true, type, t: ALLY_TYPES[type], name: ALLY_TYPES[type].name, frames: NPC_SPR[ALLY_TYPES[type].spr], x, y, hurtT: 0 };
+    if (a.x === undefined || Math.hypot(a.x - x, a.y - y) > 60) { a.x = x; a.y = y; }
+    a.tx = x; a.ty = y;
+    return Object.assign(a, { face, moving: !!moving, anim, hp, maxHp, down: !!down, reviveT });
+  });
   s.pl.forEach((a, i) => {
     const p = G.players[i];
     if (!p) return;
@@ -453,6 +466,7 @@ Mods.add({
     const k = Math.min(1, dt * 14);
     for (const p of G.players) if (p.tx !== undefined) { p.x += (p.tx - p.x) * k; p.y += (p.ty - p.y) * k; }
     for (const e of G.enemies) if (e.tx !== undefined) { e.x += (e.tx - e.x) * k; e.y += (e.ty - e.y) * k; }
+    for (const a of G.allies || []) if (a.tx !== undefined) { a.x += (a.tx - a.x) * k; a.y += (a.ty - a.y) * k; }
     for (const p of G.projs) { p.x += p.vx * dt; p.y += p.vy * dt; }
     for (const b of G.bullets) { b.x += b.vx * dt; b.y += b.vy * dt; }
     for (const f of G.fx) f.t += dt;
@@ -498,10 +512,9 @@ const coopFinish = finishCrypt, coopDeath = cryptDeath;
 finishCrypt = function () {
   if (!(G && G.remote)) { coopFinish(); return; }
   const theme = D.theme || 'crypt', swift = D.t <= CRYPT_PAR * (D.floor || 1);
-  const relic = { tower: 'crown', mine: 'minerLamp', temple: 'templeIdol', mansion: 'thiefRing' }[theme] || null;
-  const frag = theme === 'tower' || theme === 'ruins' || theme === 'temple';
+  const deep = D.deep || 0, relic = cryptRelic(theme, deep), frag = cryptFrag(theme, deep, D.oreCount || 0), rescued = [...(D.rescued || [])];
   if (swift) P.hp = P.maxHp;
-  Net.send({ t: 'cryptDone', cleared: true, hp: P.hp, gold: G.gold - G.cryptStart.gold + (swift ? 100 : 40), kills: G.kills - G.cryptStart.kills, st: G.cryptStart.st, relic, frag });
+  Net.send({ t: 'cryptDone', cleared: true, hp: P.hp, gold: G.gold - G.cryptStart.gold + Math.round((swift ? 100 : 40) * (1 + 0.9 * deep)), kills: G.kills - G.cryptStart.kills, st: G.cryptStart.st, relic, frag, deep, rescued });
   D.dead = true;
   leaveCrypt(() => {});
 };

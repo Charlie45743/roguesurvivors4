@@ -52,10 +52,10 @@ const DIMS = {
   frozen: { name: 'The Frozen Expanse', mul: 1.6, color: '#8ff0ff', boss: 'wyrm', relic: 'moonPearl', dark: 0.7, enemies: { wolf: 4, golem: 1.5, snowwisp: 2, skel: 1 }, sub: 'Danger x1.6. A wyrm sleeps beneath the ice' },
   rift: { name: 'The Infernal Rift', mul: 2.3, color: '#e8742c', boss: 'titan', relic: 'demonHorn', dark: 1.1, enemies: { imp: 3, magmaslime: 2.5, hound: 3 }, sub: 'Danger x2.3. The ground itself burns' },
   void: { name: 'The Void Garden', mul: 3.2, color: '#e27bf0', boss: 'watcher', relic: 'templeIdol', dark: 1.25, enemies: { crawler: 3, stalker: 2, swarmeye: 3 }, sub: 'Danger x3.2. Something vast is watching' },
-  island: { name: 'The Drowned Isle', mul: 4.2, color: '#3f8ee0', boss: 'leviathan', relic: 'crown', dark: 0.9, enemies: {}, sub: 'Danger x4.2. Two titans rule this island' },
+  island: { name: 'The Drowned Isle', mul: 4.2, color: '#3f8ee0', boss: 'leviathan', relic: 'crown', dark: 0.9, enemies: {}, chainEnemies: { hound: 2, imp: 2, crawler: 1.5, stalker: 1 }, sub: 'Danger x4.2. Two titans rule this island' },
   demon: { name: 'The Demon Realm', mul: 3.6, color: '#d8354a', boss: 'archfiend', relic: 'demonHorn', dark: 1.3, enemies: { imp: 3, hound: 3, stalker: 1 }, sub: 'Danger x3.6. Its master waits' },
 };
-const PORTAL_TIMES = [[200, 'frozen'], [400, 'rift'], [580, 'void'], [760, 'island']];
+const PORTAL_TIMES = [[200, 'frozen']]; // the first portal opens the chain: frozen > rift > void > demon > island
 const isleBiome = (x, y) => (x * x / (ISLAND_R * ISLAND_R) + y * y / (ISLAND_R * ISLAND_R * 0.64) < 1 ? 'isle' : 'sea');
 
 function spawnPortal(dim, x, y) {
@@ -105,10 +105,11 @@ function enterDimension(dim) {
   $('fade').classList.add('on');
   setState('fading');
   setTimeout(() => {
-    G.saved = { enemies: G.enemies, gems: G.gems, items: G.items, pools: G.pools, totems: G.totems, bullets: G.bullets, hazards: G.hazards, portals: G.portals,
+    if (!G.dim) G.saved = { enemies: G.enemies, gems: G.gems, items: G.items, pools: G.pools, totems: G.totems, bullets: G.bullets, hazards: G.hazards, portals: G.portals,
       pos: G.players.map(p => [p.x, p.y]), shrines: G.shrines, crypts: G.crypts, darkMul: G.darkMul, spawnMul: G.spawnMul, ev: G.ev };
     G.enemies = []; G.gems = []; G.items = []; G.pools = []; G.totems = []; G.bullets = []; G.hazards = []; G.portals = []; G.shrines = []; G.crypts = []; G.ev = null;
     G.dim = dim; G.dimMul = def.mul; G.darkMul = def.dark; G.spawnMul = 1; G.dimT = 0; G.dimPhase = 'survive'; G.dimAcc = 0; G.dimBossIdx = 0;
+    G.spawner = null; G.nextDim = null; G.advanceT = 0; G.dimEnraged = false; G.chainStarted = true; G.dimLeft = DIM_TIME[dim] || 100;
     biomeOverride = dim === 'island' ? isleBiome : () => dim;
     resetWorldCache();
     G.players.forEach((p, i) => { p.x = i * 18; p.y = 0; });
@@ -118,7 +119,8 @@ function enterDimension(dim) {
     Snd.music(2);
     $('fade').classList.remove('on');
     banner(def.name, def.sub, def.color);
-    if (dim === 'island') setTimeout(() => G && G.dim === 'island' && dimBoss(), 2500);
+    if (G.story) { if (dim === 'island') setTimeout(() => G && G.dim === 'island' && dimBoss(), 2500); }
+    else placeSpawner(dim);
     Mods.call('enteredDim', dim);
   }, 350);
 }
@@ -144,13 +146,13 @@ function exitDimension() {
     Mods.call('leftDim', dim);
   }, 350);
 }
-function dimBoss() {
+function dimBoss(px, py, enraged) {
   const def = DIMS[G.dim];
   const ids = G.dim === 'island' ? ['leviathan', 'herald'] : [def.boss];
   const id = ids[G.dimBossIdx];
-  const [x, y] = G.dim === 'island' ? [ISLAND_R, 0] : edgePos(30);
+  const [x, y] = G.dim === 'island' ? [ISLAND_R, 0] : px !== undefined ? [px, py] : edgePos(30);
   G.dimPhase = 'boss';
-  const b = makeBoss(id, id === 'herald' ? 0 : x, id === 'herald' ? -ISLAND_R * 0.5 : y, { hpMul: 0.5 + def.mul * 0.35, dmgMul: 0.2 + def.mul * 0.6, onDeath: e => dimBossDown(e) });
+  const b = makeBoss(id, id === 'herald' ? 0 : x, id === 'herald' ? -ISLAND_R * 0.5 : y, { hpMul: 0.5 + def.mul * 0.35, dmgMul: (0.2 + def.mul * 0.6) * (enraged ? 1.25 : 1), onDeath: e => dimBossDown(e) });
   banner(b.name, G.dim === 'island' && G.dimBossIdx === 1 ? 'The black sun descends' : 'Guardian of ' + def.name, def.color);
   Snd.play('warn');
 }
@@ -205,8 +207,7 @@ Mods.add({
     for (const p of G.portals) { p.t += dt; if (p.dim !== 'home') p.life -= dt; }
     G.portals = G.portals.filter(p => p.life > 0);
     if (!G.dim && !G.story?.noPortals) {
-      const next = PORTAL_TIMES[G.portalIdx];
-      if (next && G.t >= next[0] && !G.boss) { spawnPortal(next[1]); G.portalIdx++; }
+      if (!G.chainStarted && G.t >= (G.nextPortalT ?? PORTAL_TIMES[0][0]) && !G.boss && !G.portals.some(p => p.dim !== 'home')) { spawnPortal(PORTAL_TIMES[0][1]); G.nextPortalT = G.t + 160; }
     }
     if (!G.dim) return;
     for (const w of G.wells) {
@@ -225,6 +226,8 @@ Mods.add({
     }
   },
   interact(pl = ME) {
+    const sp = nearSpawner(pl);
+    if (sp) { activateSpawner(sp); return true; }
     const p = nearPortal(pl);
     if (!p) return false;
     if (p.dim === 'home') exitDimension();
@@ -234,12 +237,23 @@ Mods.add({
     return true;
   },
   promptLabel() {
+    if (nearSpawner(ME)) return 'E · Break the seal';
     const p = nearPortal(ME);
     return p ? (p.dim === 'home' ? 'E · Return to the night' : 'E · ' + DIMS[p.dim].name) : '';
   },
-  ents(list) { for (const p of G.portals) if (onScreen(p.x, p.y, 40)) list.push(p); },
-  pointers(list) { for (const p of G.portals) if (!onScreen(p.x, p.y - 14, 10)) list.push({ x: p.x, y: p.y, pcolor: p.dim === 'home' ? '#ffd35a' : DIMS[p.dim].color, picon: ICON.nova }); },
-  minimap(dot) { for (const p of G.portals) dot(p.x, p.y, p.dim === 'home' ? '#ffd35a' : DIMS[p.dim].color, 3); },
+  ents(list) {
+    for (const p of G.portals) if (onScreen(p.x, p.y, 40)) list.push(p);
+    const s = G.spawner;
+    if (s && G.dim && onScreen(s.x, s.y, 50)) list.push({ sortY: s.y + 6, y: s.y, x: s.x, draw: now => drawSpawner(s, now) });
+  },
+  pointers(list) {
+    const s = G.spawner;
+    if (s && !s.on && G.dim && !onScreen(s.x, s.y - 10, 10)) list.push({ x: s.x, y: s.y, pcolor: DIMS[G.dim].color, picon: ICON.skull });
+    for (const p of G.portals) if (!onScreen(p.x, p.y - 14, 10)) list.push({ x: p.x, y: p.y, pcolor: p.dim === 'home' ? '#ffd35a' : DIMS[p.dim].color, picon: ICON.nova }); },
+  minimap(dot) {
+    for (const p of G.portals) dot(p.x, p.y, p.dim === 'home' ? '#ffd35a' : DIMS[p.dim].color, 3);
+    if (G.spawner && !G.spawner.on && G.dim) dot(G.spawner.x, G.spawner.y, Math.floor(performance.now() / 250) % 2 ? '#ffffff' : DIMS[G.dim].color, 4);
+  },
   drawGround(now) {
     if (G.dim === 'island') {
       ctx.fillStyle = '#8fd4e8';
@@ -268,8 +282,133 @@ Mods.add({
     } else if (G.dim === 'void') { ctx.fillStyle = 'rgba(80,20,120,0.1)'; ctx.fillRect(0, 0, W, H); }
     if (G.dim) {
       const def = DIMS[G.dim];
-      const txt = G.dimPhase === 'survive' && G.dim !== 'island' ? `GUARDIAN IN ${Math.max(0, Math.ceil(45 - G.dimT))}` : G.dimPhase === 'done' ? 'FIND THE GOLDEN PORTAL' : '';
-      if (txt) drawText(ctx, txt, W / 2, 46, def.color);
+      let txt = '', col = def.color;
+      if (G.story) txt = G.dimPhase === 'survive' && G.dim !== 'island' ? `GUARDIAN IN ${Math.max(0, Math.ceil(45 - G.dimT))}` : G.dimPhase === 'done' ? 'FIND THE GOLDEN PORTAL' : '';
+      else if (G.dimPhase === 'survive') { const left = Math.max(0, Math.ceil(G.dimLeft || 0)); txt = `FIND THE SEAL  ${left}`; if (left <= 15) col = Math.floor(now * 4) % 2 ? '#ff6a7a' : '#ffffff'; }
+      else if (G.dimPhase === 'done' && G.advanceT > 0) txt = `NEXT DIMENSION IN ${Math.ceil(G.advanceT)}`;
+      if (txt) drawText(ctx, txt, W / 2, 46, col, G.story ? 1 : 2);
     }
   },
 });
+
+/* ---------- The dimension chain ----------
+   One portal opens the chain. In every dimension a countdown runs: find the guardian's seal (a summoning altar guarded by
+   its foes), break it, and kill what answers. The way to the next dimension opens, and so on to the Drowned Isle's two
+   titans. When the clock runs out first, the dimension collapses and the guardian comes for you, enraged. */
+const DIM_CHAIN = ['frozen', 'rift', 'void', 'demon', 'island'];
+const DIM_TIME = { frozen: 100, rift: 100, void: 110, demon: 110, island: 130 };
+
+function placeSpawner(dim) {
+  let x, y;
+  if (dim === 'island') { x = -ISLAND_R * 0.4; y = ISLAND_R * 0.12; }
+  else { const a = rand(0, TAU), R = rand(430, 640); x = Math.cos(a) * R; y = Math.sin(a) * R * 0.8; }
+  ensureChunks(x, y);
+  const f = { x, y };
+  for (let i = 0; i < 3; i++) collideSolids(f, 16);
+  G.spawner = { x: f.x, y: f.y, dim, on: false, guarded: false };
+}
+function nearSpawner(pl) {
+  const s = G && G.spawner;
+  return s && !s.on && G.dim && G.dimPhase === 'survive' && pl && Math.hypot(s.x - pl.x, s.y - (pl.y + 6)) < 26 ? s : null;
+}
+function guardSpawner(s) {
+  s.guarded = true;
+  const def = DIMS[G.dim], pool = Object.keys(def.enemies).length ? def.enemies : def.chainEnemies, n = 7 + DIM_CHAIN.indexOf(G.dim) * 2;
+  for (let i = 0; i < n; i++) { const a = i / n * TAU, e = spawnEnemy(weighted(pool), s.x + Math.cos(a) * 70, s.y + Math.sin(a) * 52); e.rise = 0.5; }
+  banner('The seal is guarded', 'Cut through its keepers', DIMS[G.dim].color);
+}
+function activateSpawner(s) {
+  s.on = true;
+  G.shake = 8; G.whiteFlash = 0.4; Snd.play('bigboom');
+  for (let i = 0; i < 3; i++) G.fx.push({ k: 'ring', x: s.x, y: s.y, t: -i * 0.12, dur: 0.6, r: 40 + i * 28, c: DIMS[G.dim].color });
+  dimBoss(s.x, s.y - 30);
+}
+function collapseDimension() {
+  banner('The dimension collapses', 'The guardian comes for you', '#d8354a');
+  Snd.play('warn');
+  G.dimEnraged = true;
+  if (G.spawner) G.spawner.on = true;
+  dimBoss(undefined, undefined, true);
+}
+function drawSpawner(s, now) {
+  const col = DIMS[s.dim].color, sx = s.x - camX, sy = s.y - camY, live = !s.on;
+  shadow(s.x, s.y + 6, 22);
+  pxDisc(sx, sy + 4, 20, '#0b0a12', 0.5);
+  pxDisc(sx, sy + 4, 17, live ? 'rgba(40,20,60,0.9)' : 'rgba(40,40,40,0.9)', 0.5);
+  ctx.globalAlpha = live ? 0.55 + Math.sin(now * 3) * 0.25 : 0.25;
+  ringOval(sx, sy + 4, 18, col, 0.5, 2); ringOval(sx, sy + 4, 11 + Math.sin(now * 2) * 2, col, 0.5);
+  ctx.globalAlpha = 1;
+  for (const dx of [-12, 12]) { ctx.fillStyle = '#0b0a12'; ctx.fillRect(Math.round(sx + dx) - 2, Math.round(sy) - 6, 5, 12); ctx.fillStyle = '#5e557f'; ctx.fillRect(Math.round(sx + dx) - 1, Math.round(sy) - 5, 3, 10); }
+  ctx.fillStyle = '#0b0a12'; ctx.fillRect(Math.round(sx) - 4, Math.round(sy) - 6, 9, 11);
+  ctx.fillStyle = '#36304f'; ctx.fillRect(Math.round(sx) - 3, Math.round(sy) - 5, 7, 9);
+  const bob = Math.round(Math.sin(now * 3) * 2);
+  if (live) {
+    const cy = Math.round(sy) - 14 + bob;
+    ctx.fillStyle = '#0b0a12'; ctx.fillRect(Math.round(sx) - 3, cy - 4, 7, 9); ctx.fillRect(Math.round(sx) - 2, cy - 5, 5, 11);
+    ctx.fillStyle = col; ctx.fillRect(Math.round(sx) - 2, cy - 3, 5, 7); ctx.fillStyle = '#fff'; ctx.fillRect(Math.round(sx), cy - 2, 1, 3);
+    light(s.x, s.y - 12, 70, 1); glowAt(s.x, s.y - 12, 26, col, 0.55);
+    if (Math.random() < 0.4) addPart(s.x + rand(-10, 10), s.y - 4, 0, rand(-26, -10), 0.7, col);
+    if (nearSpawner(ME) && Math.floor(now * 3) % 2) drawText(ctx, 'E', sx, sy - 30, '#ffd35a');
+  } else light(s.x, s.y, 24, 0.4);
+}
+
+const storyDimDirector = dimDirector;
+dimDirector = function (dt) {
+  if (G.story) return storyDimDirector(dt);
+  const def = DIMS[G.dim];
+  G.dimT += dt;
+  if (G.dimPhase === 'survive') {
+    G.dimLeft -= dt;
+    const sp = G.spawner;
+    if (sp && !sp.guarded && G.players.some(p => Math.hypot(p.x - sp.x, p.y - sp.y) < 340)) guardSpawner(sp);
+    if (G.dimLeft <= 0) collapseDimension();
+  } else if (G.dimPhase === 'done' && G.nextDim) {
+    G.advanceT -= dt;
+    if (G.advanceT <= 0 && state === 'play') { const n = G.nextDim; G.nextDim = null; enterDimension(n); return true; }
+  }
+  const pool = Object.keys(def.enemies).length ? def.enemies : def.chainEnemies;
+  const rate = G.dimPhase === 'survive' ? (2.4 + G.dimT / 20) * Math.sqrt(def.mul) : G.dimPhase === 'boss' ? 1.4 : 0;
+  G.dimAcc += rate * (G.dimEnraged ? 1.8 : 1) * dt;
+  while (G.dimAcc >= 1) {
+    G.dimAcc--;
+    if (G.mobs < 200 && pool) { const [x, y] = edgePos(); spawnEnemy(weighted(pool), x, y); }
+  }
+  const minute = G.t / 60;
+  G.hpMul = 1 + minute * 0.16 + minute * minute * 0.011;
+  G.hazT = (G.hazT || 3) - dt;
+  if (G.hazT <= 0 && G.dimPhase !== 'done') {
+    const pl = nearestPlayer(ME.x, ME.y);
+    if (G.dim === 'frozen') { G.hazT = 7; for (let i = 0; i < 8; i++) hz({ k: 'circle', x: pl.x + rand(-90, 90), y: pl.y + rand(-60, 60), r: 14, warn: 1, life: 0.2, dmg: 14 * def.mul * 0.6, color: '#8ff0ff', liveColor: '#fff' }); }
+    else if (G.dim === 'rift' || G.dim === 'demon') { G.hazT = 4; for (let i = 0; i < 3; i++) hz({ k: 'circle', x: pl.x + rand(-80, 80), y: pl.y + rand(-60, 60), r: 22, warn: 1.1, life: 0.6, dmg: 18 * def.mul * 0.6, color: '#e8742c', liveColor: '#ffd35a', boom: 2 }); }
+    else if (G.dim === 'void') { G.hazT = 9; const x = pl.x + rand(-60, 60), y = pl.y + rand(-50, 50); hz({ k: 'circle', x, y, r: 26, warn: 0.8, life: 3, tick: 0.4, dmg: 10, color: '#9a4fd0', liveColor: 'rgba(11,10,18,0.8)' }); G.wells.push({ x, y, t: 3.8 }); }
+    else G.hazT = 99;
+  }
+  return true;
+};
+
+// Chain mode: a guardian's fall pays out, heals the party and opens the way on; the island's second titan ends the night
+const storyDimBossDown = dimBossDown;
+dimBossDown = function (e) {
+  if (G.story || (G.dim === 'island' && G.dimBossIdx === 0)) { storyDimBossDown(e); return; }
+  const def = DIMS[G.dim], idx = DIM_CHAIN.indexOf(G.dim), next = DIM_CHAIN[idx + 1];
+  G.dimPhase = 'done';
+  for (const o of G.enemies) if (!o.dead && !o.prop) o.dawn = rand(0.2, 1.5);
+  const x = clamp(e.x, -ISLAND_R * 0.6, ISLAND_R * 0.6), y = clamp(e.y, -ISLAND_R * 0.5, ISLAND_R * 0.5);
+  const chests = (next ? 1 : 3) + (idx >= 2 ? 1 : 0);
+  for (let i = 0; i < chests; i++) dropAt('chest', x + (i - (chests - 1) / 2) * 20, y, { boss: true });
+  dropRelic(def.relic, x, y + 20);
+  for (let i = 0; i < 4; i++) dropAt('bag', x + rand(-24, 24), y + rand(-16, 16));
+  for (const p of G.players) { p.down = false; p.hp = Math.min(p.maxHp, Math.max(p.hp, 1) + p.maxHp * 0.4); }
+  for (const a of G.allies || []) { a.down = false; a.hp = Math.min(a.maxHp, a.hp + a.maxHp * 0.5); }
+  if (!next) {
+    G.won = true; G.winT = 5;
+    for (const p of G.players) p.inv = 99;
+    banner('The long night ends', 'Every dimension is conquered', '#ffd35a');
+    Mods.call('dimConquered', G.dim);
+    return;
+  }
+  G.nextDim = next; G.advanceT = 9;
+  spawnPortal(next, x, y - 44);
+  banner(def.name + ' is conquered', 'Take the treasure. ' + DIMS[next].name + ' calls', '#ffd35a');
+  Mods.call('dimConquered', G.dim);
+};
