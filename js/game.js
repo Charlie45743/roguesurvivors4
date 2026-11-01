@@ -2358,7 +2358,7 @@ function openLevelUp() {
   setState('levelup');
   Snd.play('levelup');
   $('xpbar').classList.add('flash');
-  G.choices = withPlayer(G.chooser, () => rollChoices(Math.random() < 0.2 ? 4 : 3));
+  G.choices = withPlayer(G.chooser, () => rarify(rollChoices(Math.random() < 0.2 ? 4 : 3)));
   setWho('luWho', G.chooser, G.lvQueue.length ? ' chooses · the others wait' : ' chooses');
   withPlayer(G.chooser, renderChoices);
 }
@@ -2366,15 +2366,11 @@ function renderChoices() {
   const box = $('luCards');
   box.innerHTML = '';
   G.choices.forEach((c, i) => {
-    const info = choiceInfo(c);
+    const info = choiceInfo(c), r = c.r || 0;
     const b = document.createElement('button');
-    b.className = 'card';
-    b.style.animationDelay = i * 0.06 + 's';
-    b.innerHTML = `<span class="key">${i + 1}</span>
-      <div class="top"><div class="ic"><img src="${ICON_URL[info.icon]}" alt=""></div>
-      <div><div class="name">${info.name}</div><div class="lv ${info.cls || ''}">${info.lv}</div></div></div>
-      <div class="desc">${info.desc}</div>
-      ${info.hint ? `<div class="hint"><img src="${ICON_URL[info.hintIcon]}" alt="">${info.hint}</div>` : ''}`;
+    b.className = 'card boon';
+    b.style.cssText = `--rc:${RARITY[r].color}; animation-delay:${i * 0.06}s`;
+    b.innerHTML = boonInner({ info, r, gain: monoGain(c, RARITY[r].lv) }, i);
     b.onclick = () => { if (menuClickAllowed()) pickChoice(i); };
     b.onmouseenter = () => { if (luSel !== i) { luSel = i; markSel(); Snd.play('hover'); } };
     box.appendChild(b);
@@ -2388,7 +2384,7 @@ function pickChoice(i) {
   const c = G.choices[i];
   if (!c || state !== 'levelup') return;
   Snd.play('select');
-  withPlayer(G.chooser || P, () => applyChoice(c));
+  withPlayer(G.chooser || P, () => grantChoice(c));
   refreshSlots();
   finishLevel();
 }
@@ -2403,7 +2399,7 @@ function finishLevel() {
 $('btnReroll').onclick = () => {
   if (G.rerolls <= 0 || !menuClickAllowed()) return;
   G.rerolls--; Snd.play('select');
-  G.choices = withPlayer(G.chooser || P, () => rollChoices(G.choices.length));
+  G.choices = withPlayer(G.chooser || P, () => rarify(rollChoices(G.choices.length)));
   withPlayer(G.chooser || P, renderChoices);
 };
 $('btnSkip').onclick = () => { if (!menuClickAllowed()) return; Snd.play('select'); finishLevel(); };

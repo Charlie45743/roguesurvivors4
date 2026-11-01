@@ -2,7 +2,7 @@
 /* Monolith: a standing stone that rises at random. Stay inside its circle until it wakes, then pick one of three boons.
    Each boon has a rarity; the rarer it is, the more levels it grants. Options are listed rarest first. */
 
-const MONO_R = 44, MONO_NEED = 8;
+const MONO_R = 44, MONO_NEED = 4;
 const RARITY = [
   { name: 'Common', color: '#a59cc4', w: 55, lv: 1 },
   { name: 'Uncommon', color: '#a6e05a', w: 25, lv: 1, gold: 60 },
@@ -25,15 +25,6 @@ function monoGain(c, n) {
   }
   return { n: 1, from: '', lines: [choiceInfo(c).desc] };
 }
-function monoOffer(pl) {
-  const keep = P; P = pl;
-  try {
-    return rollChoices(3).map(c => {
-      const r = weighted(Object.fromEntries(RARITY.map((x, i) => [i, x.w]))) | 0;
-      return { c, r, info: choiceInfo(c), gain: monoGain(c, RARITY[r].lv) };
-    }).sort((a, b) => b.r - a.r);
-  } finally { P = keep; }
-}
 function monoGrant(pl, o) {
   const keep = P, r = RARITY[o.r]; P = pl;
   try {
@@ -44,23 +35,50 @@ function monoGrant(pl, o) {
   banner(`${r.name}: ${o.info.name}`, o.gain.lines[0] || '', r.color);
   setState('play');
 }
+const rollRarity = () => weighted(Object.fromEntries(RARITY.map((x, i) => [i, x.w]))) | 0;
+// The card body shared by monoliths and level-ups: rarity, picture, name, and exactly what you gain
+function boonInner(o, i) {
+  const r = RARITY[o.r];
+  return `<span class="key">${i + 1}</span>
+    <div class="rar">${r.name}</div>
+    <div class="top"><div class="ic"><img src="${ICON_URL[o.info.icon]}" alt=""></div><div><div class="name">${o.info.name}</div><div class="lv">${o.gain.from}</div></div></div>
+    <ul class="gain">${o.gain.lines.map(l => `<li>${l}</li>`).join('')}${r.gold ? `<li>+${r.gold} gold</li>` : ''}${r.heal ? '<li>Full heal</li>' : ''}</ul>
+    ${o.info.hint ? `<div class="hint"><img src="${ICON_URL[o.info.hintIcon]}" alt="">${o.info.hint}</div>` : ''}`;
+}
+// Give a rolled choice at its rarity (level-ups use this too); a choice with no rarity is Common
+function grantChoice(c) {
+  const r = RARITY[c.r || 0], n = Math.max(1, monoGain(c, r.lv).n);
+  for (let i = 0; i < n; i++) applyChoice(c);
+  if (r.gold) G.gold += r.gold;
+  if (r.heal) P.hp = P.maxHp;
+}
+// Roll choices with rarities, rarest first
+const rarify = list => { for (const c of list) c.r = rollRarity(); return list.sort((a, b) => b.r - a.r); };
+
 let BOON = null, boonSel = 0;
+function renderBoon() {
+  const keep = P; P = BOON.pl;
+  try {
+    BOON.opts = rarify(rollChoices(3)).map(c => ({ c, r: c.r, info: choiceInfo(c), gain: monoGain(c, RARITY[c.r].lv) }));
+  } finally { P = keep; }
+  drawBoon();
+}
+function drawBoon() {
+  $('boonCards').innerHTML = BOON.opts.map((o, i) => `<button class="card boon" style="--rc:${RARITY[o.r].color}; animation-delay:${i * 0.08}s">${boonInner(o, i)}</button>`).join('');
+  [...$('boonCards').children].forEach((el, i) => { el.onclick = () => boonPick(i); el.onmouseenter = () => { boonSel = i; boonMark(); }; });
+  $('btnBoonReroll').textContent = `Reroll (${G.rerolls})`; $('btnBoonReroll').disabled = G.rerolls <= 0;
+  boonSel = 0; boonMark();
+}
 function monoOpen(pl) {
-  const opts = monoOffer(pl);
+  const keep = P; P = pl;
+  let opts;
+  try { opts = rarify(rollChoices(3)).map(c => ({ c, r: c.r, info: choiceInfo(c), gain: monoGain(c, RARITY[c.r].lv) })); } finally { P = keep; }
   if (!opts.length) { G.gold += 100; banner('The monolith is quiet', '+100 gold', '#8ff0ff'); return; }
   if (pl !== ME && !G.local) { monoGrant(pl, opts[0]); return; }   // an online partner takes the best boon on offer
-  BOON = { pl, opts }; boonSel = 0;
+  BOON = { pl, opts };
   Snd.play('evolve'); G.whiteFlash = 0.6;
   setState('boon');
-  $('boonCards').innerHTML = opts.map((o, i) => {
-    const r = RARITY[o.r];
-    return `<button class="card boon" style="--rc:${r.color}; animation-delay:${i * 0.08}s"><span class="key">${i + 1}</span>
-      <div class="rar">${r.name}</div>
-      <div class="top"><div class="ic"><img src="${ICON_URL[o.info.icon]}" alt=""></div><div><div class="name">${o.info.name}</div><div class="lv">${o.gain.from}</div></div></div>
-      <ul class="gain">${o.gain.lines.map(l => `<li>${l}</li>`).join('')}${r.gold ? `<li>+${r.gold} gold</li>` : ''}${r.heal ? '<li>Full heal</li>' : ''}</ul></button>`;
-  }).join('');
-  [...$('boonCards').children].forEach((el, i) => { el.onclick = () => boonPick(i); el.onmouseenter = () => { boonSel = i; boonMark(); }; });
-  boonMark();
+  drawBoon();
 }
 const boonMark = () => [...$('boonCards').children].forEach((el, i) => el.classList.toggle('sel', i === boonSel));
 function boonPick(i) {
@@ -69,10 +87,13 @@ function boonPick(i) {
   const { pl, opts } = BOON; BOON = null;
   monoGrant(pl, opts[i]);
 }
+$('btnBoonReroll').onclick = () => { if (state !== 'boon' || !BOON || G.rerolls <= 0) return; G.rerolls--; Snd.play('select'); renderBoon(); };
+$('btnBoonSkip').onclick = () => { if (state !== 'boon') return; Snd.play('select'); BOON = null; setState('play'); };
 addEventListener('keydown', e => {
   if (state !== 'boon' || !BOON) return;
   const n = parseInt(e.key, 10), len = BOON.opts.length;
   if (n >= 1 && n <= len) boonPick(n - 1);
+  else if (e.code === 'KeyR') $('btnBoonReroll').click();
   else if (/Arrow(Right|Down)|KeyD|KeyS/.test(e.code)) { boonSel = (boonSel + 1) % len; boonMark(); Snd.play('hover'); }
   else if (/Arrow(Left|Up)|KeyA|KeyW/.test(e.code)) { boonSel = (boonSel + len - 1) % len; boonMark(); Snd.play('hover'); }
   else if (e.code === 'Enter' || e.code === 'Space') { e.preventDefault(); boonPick(boonSel); }
@@ -87,7 +108,7 @@ function monoAt(i, j) {
   if (G.monos.has(k)) return G.monos.get(k);
   const sd = G.seed | 0;
   let m = null;
-  if (hash2(i, j, sd) < 0.62) {
+  if (hash2(i, j, sd) < 0.354) {
     const x = (i + 0.15 + 0.7 * hash2(i, j, sd + 1)) * MONO_CELL, y = (j + 0.15 + 0.7 * hash2(i, j, sd + 2)) * MONO_CELL;
     const ok = coastK(x, y) < 0.9 && Math.hypot(x, y) > (G.siege ? 200 : 110) && !structsNear(x, y, 1).some(st => Math.hypot(st.x - x, (st.y - y) * 1.2) < st.R + 50);
     if (ok) m = { x, y, prog: 0, cd: 0 };
