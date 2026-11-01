@@ -162,7 +162,15 @@ h2 { font-family: var(--head); font-weight: 700; font-size: clamp(26px, 4.5vw, 4
   background: repeating-conic-gradient(rgba(255,211,90,.16) 0 10deg, transparent 10deg 20deg);
   -webkit-mask: radial-gradient(circle, #000 0, transparent 60%); mask: radial-gradient(circle, #000 0, transparent 60%);
   animation: spin 14s linear infinite; transition: opacity .4s; }
-#chest.open .rays { opacity: 1; }
+#chest.open .rays, #boon .rays { opacity: 1; }
+#boon { overflow: hidden; }
+#boon .rays { top: 50%; width: 1300px; height: 1300px; margin: -650px 0 0 -650px; background: repeating-conic-gradient(rgba(143,240,255,.14) 0 10deg, transparent 10deg 20deg); }
+.card.boon { width: 250px; gap: 12px; border-top: 0; box-shadow: 0 0 0 3px var(--void), 0 0 0 6px var(--rc), 0 0 0 9px var(--void), 0 0 34px color-mix(in srgb, var(--rc) 40%, transparent); }
+.card.boon:hover, .card.boon.sel { box-shadow: 0 0 0 3px var(--void), 0 0 0 6px var(--rc), 0 0 0 9px var(--void), 0 0 52px var(--rc); }
+.card.boon .rar { font-family: var(--head); font-size: 15px; letter-spacing: 2px; text-transform: uppercase; color: var(--rc); }
+.card.boon .ic { width: 68px; height: 68px; } .card.boon .ic img { image-rendering: pixelated; }
+.card.boon .gain { list-style: none; margin: 0; padding: 10px 0 0; border-top: 2px solid var(--line); display: flex; flex-direction: column; gap: 6px; }
+.card.boon .gain li { font-size: 18px; line-height: 1.2; color: #fff; } .card.boon .gain li::before { content: "▲ "; color: var(--rc); font-size: 13px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 #chestImg { width: 144px; position: relative; filter: drop-shadow(0 0 0 transparent); }
 #chest.shake #chestImg { animation: shake .08s infinite; }
@@ -552,6 +560,11 @@ button.pane.open:hover { opacity: 1; background: var(--panel2); }
   <button class="btn" id="btnChest">Open</button>
 </section>
 
+<section id="boon" class="screen hidden dim">
+  <div class="rays"></div>
+  <div id="boonCards" class="cards lu"></div>
+</section>
+
 <section id="shrine" class="screen hidden dim">
   <h2 class="shrineh">Shrine of Fortune</h2>
   <p class="sub">Offer gold. The shrine decides whether you deserve it.</p>
@@ -632,38 +645,38 @@ button.pane.open:hover { opacity: 1; background: var(--panel2); }
 window.__errs = [];
 window.addEventListener('error', e => { window.__errs.push(e.message + ':' + e.lineno); document.getElementById('err').textContent += (e.message + ' @' + (e.filename || '').split('/').pop() + ':' + e.lineno + '\n'); });
 </script>
-<script src="js/sprites.js?v=10"></script>
-<script src="js/audio.js?v=10"></script>
-<script src="js/data.js?v=10"></script>
-<script src="js/game.js?v=10"></script>
-<script src="js/art.js?v=10"></script>
-<script src="js/dungeon.js?v=10"></script>
-<script src="js/dungeon2.js?v=10"></script>
-<script src="js/bosses.js?v=10"></script>
-<script src="js/bossfx.js?v=10"></script>
-<script src="js/bossart.js?v=10"></script>
-<script src="js/structures.js?v=10"></script>
-<script src="js/powerups.js?v=10"></script>
-<script src="js/towns.js?v=10"></script>
-<script src="js/dims.js?v=10"></script>
-<script src="js/story.js?v=10"></script>
-<script src="js/allies.js?v=10"></script>
-<script src="js/sites.js?v=10"></script>
-<script src="js/dungeon3.js?v=10"></script>
-<script src="js/world.js?v=10"></script>
-<script src="js/cine.js?v=10"></script>
-<script src="js/ldbosses.js?v=10"></script>
-<script src="js/lastdawn.js?v=10"></script>
-<script src="js/ldch1.js?v=10"></script>
-<script src="js/ldch3.js?v=10"></script>
-<script src="js/ldch5.js?v=10"></script>
+<script src="js/sprites.js?v=11"></script>
+<script src="js/audio.js?v=11"></script>
+<script src="js/data.js?v=11"></script>
+<script src="js/game.js?v=11"></script>
+<script src="js/art.js?v=11"></script>
+<script src="js/dungeon.js?v=11"></script>
+<script src="js/dungeon2.js?v=11"></script>
+<script src="js/bosses.js?v=11"></script>
+<script src="js/bossfx.js?v=11"></script>
+<script src="js/bossart.js?v=11"></script>
+<script src="js/structures.js?v=11"></script>
+<script src="js/powerups.js?v=11"></script>
+<script src="js/towns.js?v=11"></script>
+<script src="js/dims.js?v=11"></script>
+<script src="js/story.js?v=11"></script>
+<script src="js/allies.js?v=11"></script>
+<script src="js/sites.js?v=11"></script>
+<script src="js/dungeon3.js?v=11"></script>
+<script src="js/world.js?v=11"></script>
+<script src="js/cine.js?v=11"></script>
+<script src="js/ldbosses.js?v=11"></script>
+<script src="js/lastdawn.js?v=11"></script>
+<script src="js/ldch1.js?v=11"></script>
+<script src="js/ldch3.js?v=11"></script>
+<script src="js/ldch5.js?v=11"></script>
 <script src="https://cdn.jsdelivr.net/npm/nostr-tools@2.7.2/lib/nostr.bundle.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/5.3.4/mqtt.min.js"></script>
-<script src="js/net.js?v=10"></script>
-<script src="js/local.js?v=10"></script>
-<script src="js/siege.js?v=10"></script>
-<script src="js/monolith.js?v=10"></script>
-<script src="js/menus.js?v=10"></script>
-<script src="js/devhooks.js?v=10"></script>
+<script src="js/net.js?v=11"></script>
+<script src="js/local.js?v=11"></script>
+<script src="js/siege.js?v=11"></script>
+<script src="js/monolith.js?v=11"></script>
+<script src="js/menus.js?v=11"></script>
+<script src="js/devhooks.js?v=11"></script>
 </body>
 </html>

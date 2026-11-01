@@ -230,7 +230,7 @@ function structIcon(type, col) {
   const key = type + col;
   if (iconCache[key]) return iconCache[key];
   const rows = ICON_BMP[type];
-  if (!rows) return null;
+  if (!rows || type === 'watchtower') return null;   // watchtowers keep their plain marker
   const n = parseInt(col.slice(1), 16), rgb = [n >> 16, (n >> 8) & 255, n & 255];
   const hex = c => '#' + c.map(v => Math.max(0, Math.min(255, v | 0)).toString(16).padStart(2, '0')).join('');
   const pal = { '#': '#0b0a12', o: col, l: hex(mixRGB(rgb, [255, 255, 255], 0.55)), d: hex(rgb.map(v => v * 0.55)), w: '#f2eee6', r: '#d8354a', y: '#ffd35a' };

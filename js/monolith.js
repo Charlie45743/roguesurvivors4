@@ -11,38 +11,73 @@ const RARITY = [
   { name: 'Legendary', color: '#ffd35a', w: 2, lv: 4, heal: true },
 ];
 
+// One card per boon: what it is, how many levels the rarity grants, and exactly what you gain
+function monoGain(c, n) {
+  if (c.k === 'w') {
+    const d = WEAPONS[c.id], w = G.weapons.find(x => x.id === c.id);
+    if (!w) return { n, from: 'New weapon', lines: [d.desc, ...Array.from({ length: n - 1 }, (_, i) => lvDesc(d.lv[i], d.unit))] };
+    const k = Math.min(n, WEAPON_MAX(c.id) - w.level);
+    return { n: k, from: `Level ${w.level} → ${w.level + k}`, lines: Array.from({ length: k }, (_, i) => lvDesc(d.lv[w.level - 1 + i], d.unit)) };
+  }
+  if (c.k === 'p') {
+    const l = G.passives[c.id] || 0, k = Math.min(n, PASSIVES[c.id].max - l);
+    return { n: k, from: l ? `Level ${l} → ${l + k}` : 'New relic', lines: [PASSIVES[c.id].desc.replace(/\d+(\.\d+)?/g, x => +(x * k).toFixed(2))] };
+  }
+  return { n: 1, from: '', lines: [choiceInfo(c).desc] };
+}
 function monoOffer(pl) {
   const keep = P; P = pl;
   try {
-    const picks = rollChoices(3);
-    return picks.map(c => ({ c, r: weighted(Object.fromEntries(RARITY.map((r, i) => [i, r.w]))) | 0, info: choiceInfo(c) })).sort((a, b) => b.r - a.r);
+    return rollChoices(3).map(c => {
+      const r = weighted(Object.fromEntries(RARITY.map((x, i) => [i, x.w]))) | 0;
+      return { c, r, info: choiceInfo(c), gain: monoGain(c, RARITY[r].lv) };
+    }).sort((a, b) => b.r - a.r);
   } finally { P = keep; }
 }
 function monoGrant(pl, o) {
   const keep = P, r = RARITY[o.r]; P = pl;
   try {
-    for (let i = 0; i < r.lv; i++) {
-      if (o.c.k === 'w') { const w = G.weapons.find(x => x.id === o.c.id); if (w && (w.evo || w.level >= WEAPON_MAX(w.id))) break; }
-      else if (o.c.k === 'p' && (G.passives[o.c.id] || 0) >= PASSIVES[o.c.id].max) break;
-      applyChoice(o.c);
-    }
+    for (let i = 0; i < o.gain.n; i++) applyChoice(o.c);
     if (r.gold) G.gold += r.gold;
     if (r.heal) pl.hp = pl.maxHp;
   } finally { P = keep; }
+  banner(`${r.name}: ${o.info.name}`, o.gain.lines[0] || '', r.color);
+  setState('play');
 }
+let BOON = null, boonSel = 0;
 function monoOpen(pl) {
   const opts = monoOffer(pl);
   if (!opts.length) { G.gold += 100; banner('The monolith is quiet', '+100 gold', '#8ff0ff'); return; }
+  if (pl !== ME && !G.local) { monoGrant(pl, opts[0]); return; }   // an online partner takes the best boon on offer
+  BOON = { pl, opts }; boonSel = 0;
   Snd.play('evolve'); G.whiteFlash = 0.6;
-  openModal({
-    title: 'The Monolith Wakes', color: '#8ff0ff', sub: 'Choose one boon',
-    body: '<p class="flavor">The runes burn. Rarer gifts come with more power.</p>',
-    buttons: opts.map(o => {
-      const r = RARITY[o.r];
-      return { label: `<b style="color:${r.color}">${r.name}</b> · ${o.info.name}`, desc: `${o.info.lv ? o.info.lv + ' · ' : ''}${o.info.desc} (+${r.lv} level${r.lv > 1 ? 's' : ''}${r.gold ? ', +' + r.gold + ' gold' : ''}${r.heal ? ', full heal' : ''})`, primary: o.r >= 3, act: () => monoGrant(pl, o) };
-    }),
-  }, pl);
+  setState('boon');
+  $('boonCards').innerHTML = opts.map((o, i) => {
+    const r = RARITY[o.r];
+    return `<button class="card boon" style="--rc:${r.color}; animation-delay:${i * 0.08}s"><span class="key">${i + 1}</span>
+      <div class="rar">${r.name}</div>
+      <div class="top"><div class="ic"><img src="${ICON_URL[o.info.icon]}" alt=""></div><div><div class="name">${o.info.name}</div><div class="lv">${o.gain.from}</div></div></div>
+      <ul class="gain">${o.gain.lines.map(l => `<li>${l}</li>`).join('')}${r.gold ? `<li>+${r.gold} gold</li>` : ''}${r.heal ? '<li>Full heal</li>' : ''}</ul></button>`;
+  }).join('');
+  [...$('boonCards').children].forEach((el, i) => { el.onclick = () => boonPick(i); el.onmouseenter = () => { boonSel = i; boonMark(); }; });
+  boonMark();
 }
+const boonMark = () => [...$('boonCards').children].forEach((el, i) => el.classList.toggle('sel', i === boonSel));
+function boonPick(i) {
+  if (state !== 'boon' || !BOON || !BOON.opts[i]) return;
+  Snd.play('select');
+  const { pl, opts } = BOON; BOON = null;
+  monoGrant(pl, opts[i]);
+}
+addEventListener('keydown', e => {
+  if (state !== 'boon' || !BOON) return;
+  const n = parseInt(e.key, 10), len = BOON.opts.length;
+  if (n >= 1 && n <= len) boonPick(n - 1);
+  else if (/Arrow(Right|Down)|KeyD|KeyS/.test(e.code)) { boonSel = (boonSel + 1) % len; boonMark(); Snd.play('hover'); }
+  else if (/Arrow(Left|Up)|KeyA|KeyW/.test(e.code)) { boonSel = (boonSel + len - 1) % len; boonMark(); Snd.play('hover'); }
+  else if (e.code === 'Enter' || e.code === 'Space') { e.preventDefault(); boonPick(boonSel); }
+});
+SCREENS.push('boon'); HUD_STATES.add('boon');
 
 Mods.add({
   newRun() { G.mono = null; G.monoT = 45; },

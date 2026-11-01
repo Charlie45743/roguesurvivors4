@@ -375,7 +375,7 @@ function recalc() {
   const maxHp = 100 + 20 * lv('vitality') + 10 * (sh.vit || 0) + (m.maxHp || 0);
   if (P.maxHp && maxHp > P.maxHp) P.hp += maxHp - P.maxHp;
   P.maxHp = maxHp; P.hp = Math.min(P.hp, P.maxHp);
-  P.regen = 0.12 + 0.3 * lv('vitality');
+  P.regen = 0.4 + 0.3 * lv('vitality');
   P.magnet = 32 * (1 + 0.35 * lv('magnet') + 0.15 * (sh.magnet || 0) + (m.magnet || 0));
   P.growth = 1.4 + 0.1 * lv('growth') + 0.05 * (sh.growth || 0);
   P.armor = lv('armor') + (m.armor || 0);
