@@ -40,7 +40,7 @@ const ARTS = {
   online: () => scene('#1a1a3a', '#2a3a8a', [['#8ff0ff', 65, 52, 22], [charFrames('wren')[0], .26, .2], [charFrames('brask')[0], .26, .8]]),
 };
 function fillArt() {
-  document.querySelectorAll('img[data-art]').forEach(img => { img.src = artCache[img.dataset.art] ||= ARTS[img.dataset.art](); });
+  document.querySelectorAll('img[data-art]').forEach(img => { if (ARTS[img.dataset.art]) img.src = artCache[img.dataset.art] ||= ARTS[img.dataset.art](); });
 }
 
 /* ---------- Leaderboard ---------- */
