@@ -655,8 +655,9 @@ function drawEventGround(now) {
 }
 
 /* ---------- Minimap ---------- */
-function drawMinimap(now) {
-  const S = 88, x0 = 8, y0 = H - S - 8, scale = 1 / 20, cx = x0 + S / 2, cy = y0 + S / 2;
+function drawMinimap(now, box) {
+  const me = G.local ? P : ME;   // each split-screen pane maps its own player
+  const S = box ? box.S : G.local ? Math.round(Math.min(88, H * 0.42)) : 88, x0 = box ? box.x0 : 8, y0 = box ? box.y0 : H - S - 8, scale = 1 / 20, cx = x0 + S / 2, cy = y0 + S / 2;
   // frame
   ctx.fillStyle = '#0b0a12'; ctx.fillRect(x0 - 3, y0 - 3, S + 6, S + 6);
   ctx.fillStyle = '#36304f'; ctx.fillRect(x0 - 2, y0 - 2, S + 4, S + 4);
@@ -666,27 +667,27 @@ function drawMinimap(now) {
   // explored ground, in the same fine detail as the big map
   const t = terrain(), ts = TN * TEX * scale;
   ctx.imageSmoothingEnabled = false;
-  ctx.drawImage(t.c, Math.round(cx + (TORG - ME.x) * scale), Math.round(cy + (TORG - ME.y) * scale), Math.round(ts), Math.round(ts));
+  ctx.drawImage(t.c, Math.round(cx + (TORG - me.x) * scale), Math.round(cy + (TORG - me.y) * scale), Math.round(ts), Math.round(ts));
   // what you can see on screen right now
   ctx.strokeStyle = 'rgba(242,238,230,.35)'; ctx.lineWidth = 1;
-  const vw = W * scale, vh = H * scale;
+  const vw = (box ? box.w : W) * scale, vh = (box ? box.h : H) * scale;
   ctx.strokeRect(Math.round(cx - vw / 2) + .5, Math.round(cy - vh / 2) + .5, Math.round(vw), Math.round(vh));
   const dot = (wx, wy, c, sz = 2, edge = false) => {
-    let mx = cx + (wx - ME.x) * scale, my = cy + (wy - ME.y) * scale;
+    let mx = cx + (wx - me.x) * scale, my = cy + (wy - me.y) * scale;
     const out = mx < x0 + 3 || mx > x0 + S - 3 || my < y0 + 3 || my > y0 + S - 3;
     if (out) { if (!edge) return; mx = clamp(mx, x0 + 4, x0 + S - 4); my = clamp(my, y0 + 4, y0 + S - 4); }
     ctx.fillStyle = '#0b0a12'; ctx.fillRect(Math.round(mx - sz / 2) - 1, Math.round(my - sz / 2) - 1, sz + 2, sz + 2);
     ctx.fillStyle = c; ctx.fillRect(Math.round(mx - sz / 2), Math.round(my - sz / 2), sz, sz);
   };
   const icon = (wx, wy, type, col) => {
-    const ic = structIcon(type, col), mx = cx + (wx - ME.x) * scale, my = cy + (wy - ME.y) * scale;
+    const ic = structIcon(type, col), mx = cx + (wx - me.x) * scale, my = cy + (wy - me.y) * scale;
     if (!ic) { dot(wx, wy, col, 4); return; }
     if (mx < x0 + 5 || mx > x0 + S - 5 || my < y0 + 5 || my > y0 + S - 5) return;
     ctx.drawImage(ic, Math.round(mx - 5.5), Math.round(my - 5.5));
   };
   if (!noStructs()) {
-    const witch = ME.relics?.includes('witchEye');
-    for (const st of structsNear(ME.x, ME.y, 2)) {
+    const witch = me.relics?.includes('witchEye');
+    for (const st of structsNear(me.x, me.y, 2)) {
       const seen = st.built || G.revealed?.has(st.id) || witch;
       if (seen && !(st.done && st.type !== 'village')) icon(st.x, st.y, st.type, st.ruined ? '#8a80b0' : STRUCT_COL[st.type]);
     }
@@ -696,7 +697,7 @@ function drawMinimap(now) {
   Mods.call('minimap', dot);
   if (G.ev && G.ev.x !== undefined) dot(G.ev.x, G.ev.y, Math.floor(now * 4) % 2 ? '#fff3b0' : '#d8354a', 4, true);
   for (const e of G.enemies) if (e.boss && !e.dead) dot(e.x, e.y, '#d8354a', 4, true);
-  for (const pl of G.players) if (pl !== ME) dot(pl.x, pl.y, '#3f8ee0', 4, true);
+  for (const pl of G.players) if (pl !== me) dot(pl.x, pl.y, '#3f8ee0', 4, true);
   ctx.restore();
   ctx.fillStyle = '#0b0a12'; ctx.fillRect(cx - 3, cy - 3, 7, 7);
   ctx.fillStyle = Math.floor(now * 3) % 2 ? '#ffffff' : '#ffd35a'; ctx.fillRect(cx - 2, cy - 2, 5, 5);
@@ -817,7 +818,7 @@ Mods.add({
       ctx.fillStyle = 'rgba(122,26,42,0.16)'; ctx.fillRect(0, 0, W, H);
       pxDisc(W - 34, 30, 12, '#7a1a2a', 1); pxDisc(W - 35, 29, 10, '#d8354a', 1);
     }
-    if (state === 'play' || state === 'pause') drawMinimap(now);
+    if ((state === 'play' || state === 'pause') && !(G.local && G.players.length === 3)) drawMinimap(now);
   },
   hud() {
     const chips = [];

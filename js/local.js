@@ -493,6 +493,12 @@ function renderSplit(draw, list = G.players) {
   ctx.fillStyle = '#0b0a12';
   ctx.fillRect(hw - 1, 0, 2, H);
   if (n > 2) ctx.fillRect(0, hh - 1, W, 2);
+  if (n === 3 && (state === 'play' || state === 'pause')) {   // three players leave a blank quarter: the shared minimap goes there
+    const S = Math.min(W - hw, H - hh) - 12;
+    ctx.save(); ctx.beginPath(); ctx.rect(hw, hh, W - hw, H - hh); ctx.clip();
+    P = list[0]; drawMinimap(performance.now() / 1000, { S, x0: hw + Math.floor((W - hw - S) / 2), y0: hh + Math.floor((H - hh - S) / 2), w: hw, h: hh });
+    P = ME; ctx.restore();
+  }
 }
 
 /* ---------- Crypts: the whole party goes below ---------- */

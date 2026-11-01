@@ -371,11 +371,11 @@ function recalc() {
   P.area = 1 + 0.1 * lv('area') + (m.area || 0);
   P.amount = lv('amount') + (m.amount || 0);
   P.duration = 1 + 0.12 * lv('duration') + (m.duration || 0);
-  P.speed = 72 * (1 + 0.1 * lv('speed') + 0.04 * (sh.swift || 0) + (m.speed || 0));
+  P.speed = 75 * (1 + 0.1 * lv('speed') + 0.04 * (sh.swift || 0) + (m.speed || 0));
   const maxHp = 100 + 20 * lv('vitality') + 10 * (sh.vit || 0) + (m.maxHp || 0);
   if (P.maxHp && maxHp > P.maxHp) P.hp += maxHp - P.maxHp;
   P.maxHp = maxHp; P.hp = Math.min(P.hp, P.maxHp);
-  P.regen = 0.3 * lv('vitality');
+  P.regen = 0.12 + 0.3 * lv('vitality');
   P.magnet = 32 * (1 + 0.35 * lv('magnet') + 0.15 * (sh.magnet || 0) + (m.magnet || 0));
   P.growth = 1.4 + 0.1 * lv('growth') + 0.05 * (sh.growth || 0);
   P.armor = lv('armor') + (m.armor || 0);
@@ -400,7 +400,7 @@ function weaponStats(w) {
   }
   if (w.evo) Object.assign(s, d.evoStats);
   // a Runesmith fusion: both halves of a super weapon hit harder, wider and with more projectiles
-  if (w.superWith || w.fusedInto) { s.dmg *= 1.75; s.area *= 1.3; s.amount += 1; s.cd *= 0.8; }
+  if (w.superWith || w.fusedInto) { s.dmg *= 1.3; s.area *= 1.15; s.amount += 1; s.cd *= 0.9; }
   s.dmg *= P.might; s.cd *= P.cooldown; s.amount += P.amount; s.area *= P.area; s.dur *= P.duration;
   return s;
 }

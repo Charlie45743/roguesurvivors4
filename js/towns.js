@@ -885,7 +885,7 @@ function fuseWeapons(pl, a, b, ok) {
     recalc(); refreshSlots();
     G.whiteFlash = 1; G.shake = 10; Snd.play('evolve');
     burst(pl.x, pl.y, '#e27bf0', 40, 140); burst(pl.x, pl.y, '#8ff0ff', 30, 110);
-    openModal({ title: superName(a), color: '#e27bf0', sub: 'Super weapon forged', body: `<p class="flavor">${WEAPONS[a.id].name} and ${WEAPONS[b.id].name} are one weapon now. Both fire, both evolved, both hit 75% harder with more reach and more projectiles, from a single slot.</p>`, buttons: [{ label: 'Take it', primary: true }] }, pl);
+    openModal({ title: superName(a), color: '#e27bf0', sub: 'Super weapon forged', body: `<p class="flavor">${WEAPONS[a.id].name} and ${WEAPONS[b.id].name} are one weapon now. Both fire, both evolved, both hit 30% harder with a little more reach and one more projectile, from a single slot.</p>`, buttons: [{ label: 'Take it', primary: true }] }, pl);
   } else {
     const both = Math.random() < 0.35 && pl.weapons.length > 2;
     pl.weapons.splice(pl.weapons.indexOf(b), 1);

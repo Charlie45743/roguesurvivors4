@@ -216,7 +216,7 @@ Mods.add({
   update(dt) {
     for (const p of G.portals) { p.t += dt; if (p.dim !== 'home') p.life -= dt; }
     G.portals = G.portals.filter(p => p.life > 0);
-    if (!G.dim && !G.story) worldLevelStep(dt);
+    if (!G.dim && !G.story && !G.siege) worldLevelStep(dt);
     if (!G.dim) return;
     for (const w of G.wells) {
       w.t -= dt;
@@ -313,7 +313,7 @@ Mods.add({
 const DIM_CHAIN = ['frozen', 'rift', 'void', 'demon', 'island'];
 const LEVEL_CHAIN = ['world', ...DIM_CHAIN];
 const LEVEL_TIME = 480;
-function levelLeft() { if (G.story) return null; if (G.dim) return G.dimLeft; return G.dimPhase ? LEVEL_TIME - G.t : null; }
+function levelLeft() { if (G.story || G.siege) return null; if (G.dim) return G.dimLeft; return G.dimPhase ? LEVEL_TIME - G.t : null; }
 const DIM_TIME = { frozen: 480, rift: 480, void: 480, demon: 480, island: 480 }; // eight minutes to gear up and slay the guardian
 const COLLAPSE_GRACE = 60; // after the clock hits zero the dimension has one more minute to live
 const dimClock = () => { const l = levelLeft(); return l > 0 ? l : COLLAPSE_GRACE + l; };
