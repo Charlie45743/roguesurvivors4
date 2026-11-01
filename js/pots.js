@@ -1,5 +1,5 @@
 'use strict';
-/* Clay pots: scattered across the world, the same places every run. Stand close, press E, and the pot breaks and spills gold. */
+/* Clay pots: scattered across the world, the same places every run. Stand close, press E, and the pot breaks and spills gold and xp. */
 
 const POT_CELL = 130, POT_RANGE = 22;
 function potAt(i, j) {
@@ -23,8 +23,9 @@ function potsNear(x, y, r) {
 function breakPot(p) {
   p.broken = true;
   burst(p.x, p.y - 4, '#b87444', 14, 70); burst(p.x, p.y - 4, '#8a5230', 6, 50);
-  const n = 3 + Math.floor(Math.random() * 4);
+  const n = 2 + Math.floor(Math.random() * 3), xp = 2 + Math.floor(Math.random() * 2);
   for (let i = 0; i < n; i++) G.items.push({ k: 'coin', x: p.x + rand(-9, 9), y: p.y + rand(-4, 8), ph: 0 });
+  for (let i = 0; i < xp; i++) dropGem(p.x + rand(-10, 10), p.y + rand(-4, 8), 3);
   if (Math.random() < 0.12) G.items.push({ k: 'bag', x: p.x, y: p.y + 6, ph: 0 });
   else if (Math.random() < 0.1) G.items.push({ k: 'heart', x: p.x, y: p.y + 6, ph: 0 });
   Snd.play('pickup');
