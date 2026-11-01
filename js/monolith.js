@@ -32,7 +32,6 @@ function monoGrant(pl, o) {
     if (r.gold) G.gold += r.gold;
     if (r.heal) pl.hp = pl.maxHp;
   } finally { P = keep; }
-  banner(`${r.name}: ${o.info.name}`, o.gain.lines[0] || '', r.color);
   setState('play');
 }
 const rollRarity = () => weighted(Object.fromEntries(RARITY.map((x, i) => [i, x.w]))) | 0;
@@ -76,7 +75,7 @@ function monoOpen(pl) {
   if (!opts.length) { G.gold += 100; banner('The monolith is quiet', '+100 gold', '#8ff0ff'); return; }
   if (pl !== ME && !G.local) { monoGrant(pl, opts[0]); return; }   // an online partner takes the best boon on offer
   BOON = { pl, opts };
-  Snd.play('evolve'); G.whiteFlash = 0.6;
+  Snd.play('evolve');
   setState('boon');
   drawBoon();
 }
