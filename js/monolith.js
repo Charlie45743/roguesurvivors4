@@ -79,53 +79,66 @@ addEventListener('keydown', e => {
 });
 SCREENS.push('boon'); HUD_STATES.add('boon');
 
+// Monoliths are part of the world: a few stand in every region, found at the same places all run, and they recharge after use
+const MONO_CELL = 420, MONO_COOLDOWN = 300;
+function monoAt(i, j) {
+  G.monos = G.monos || new Map();
+  const k = i * 100003 + j;
+  if (G.monos.has(k)) return G.monos.get(k);
+  const sd = G.seed | 0;
+  let m = null;
+  if (hash2(i, j, sd) < 0.62) {
+    const x = (i + 0.15 + 0.7 * hash2(i, j, sd + 1)) * MONO_CELL, y = (j + 0.15 + 0.7 * hash2(i, j, sd + 2)) * MONO_CELL;
+    const ok = coastK(x, y) < 0.9 && Math.hypot(x, y) > (G.siege ? 200 : 110) && !structsNear(x, y, 1).some(st => Math.hypot(st.x - x, (st.y - y) * 1.2) < st.R + 50);
+    if (ok) m = { x, y, prog: 0, cd: 0 };
+  }
+  G.monos.set(k, m);
+  return m;
+}
+function monosNear(x, y, r) {
+  const out = [], i0 = Math.floor((x - r) / MONO_CELL), i1 = Math.floor((x + r) / MONO_CELL), j0 = Math.floor((y - r) / MONO_CELL), j1 = Math.floor((y + r) / MONO_CELL);
+  for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) { const m = monoAt(i, j); if (m) out.push(m); }
+  return out;
+}
+
 Mods.add({
-  newRun() { G.mono = null; G.monoT = 45; },
+  newRun() { G.monos = new Map(); },
   update(dt) {
     if (G.dim || G.story || G.over || state !== 'play') return;
-    const m = G.mono;
-    if (!m) {
-      G.monoT -= dt;
-      if (G.monoT <= 0) {
-        const a = Math.random() * TAU, R = rand(150, 230);
-        G.mono = { x: ME.x + Math.cos(a) * R, y: ME.y + Math.sin(a) * R, prog: 0, t: 0 };
-        banner('A monolith rises', 'Stand in its circle to wake it', '#8ff0ff');
-        Snd.play('warn');
+    const seen = new Set();
+    for (const m of G.monos.values()) if (m && m.cd > 0) m.cd = Math.max(0, m.cd - dt);
+    for (const pl of G.players) for (const m of monosNear(pl.x, pl.y, 300)) seen.add(m);
+    for (const m of seen) {
+      if (m.cd > 0) continue;
+      const near = G.players.filter(p => !p.down && Math.hypot(p.x - m.x, p.y - m.y) < MONO_R);
+      m.prog = near.length ? m.prog + dt : Math.max(0, m.prog - dt * 0.5);
+      if (m.prog >= MONO_NEED) {
+        m.prog = 0; m.cd = MONO_COOLDOWN;
+        burst(m.x, m.y - 10, '#8ff0ff', 40, 110);
+        monoOpen(near[0]);
+        return;
       }
-      return;
     }
-    m.t += dt;
-    const near = G.players.filter(p => !p.down && Math.hypot(p.x - m.x, p.y - m.y) < MONO_R);
-    m.prog = near.length ? m.prog + dt : Math.max(0, m.prog - dt * 0.5);
-    if (m.prog >= MONO_NEED) {
-      G.mono = null; G.monoT = rand(80, 120);
-      burst(m.x, m.y - 10, '#8ff0ff', 40, 110);
-      monoOpen(near[0]);
-    } else if (!G.players.some(p => Math.hypot(p.x - m.x, p.y - m.y) < 1100)) { G.mono = null; G.monoT = 30; }
   },
   ents(list) {
-    const m = G.mono;
-    if (m && onScreen(m.x, m.y, MONO_R + 20)) list.push({ sortY: m.y + 6, y: m.y, x: m.x, draw: now => drawMono(m, now) });
+    for (const m of monosNear(camX + W / 2, camY + H / 2, Math.max(W, H) / 2 + 80)) if (onScreen(m.x, m.y, MONO_R + 20)) list.push({ sortY: m.y + 6, y: m.y, x: m.x, draw: now => drawMono(m, now) });
   },
-  pointers(list) {
-    const m = G.mono;
-    if (m && !onScreen(m.x, m.y - 10, 10)) list.push({ x: m.x, y: m.y, pcolor: '#8ff0ff', picon: ICON.nova });
-  },
-  minimap(dot) { if (G.mono) dot(G.mono.x, G.mono.y, '#8ff0ff', 4, true); },
+  minimap(dot) { for (const m of monosNear(ME.x, ME.y, 1100)) if (m.cd <= 0) dot(m.x, m.y, '#8ff0ff', 3); },
 });
 
 function drawMono(m, now) {
   const x = Math.round(m.x - camX), y = Math.round(m.y - camY), t = now / 1000, k = m.prog / MONO_NEED;
   ctx.lineWidth = 1;
-  ctx.strokeStyle = 'rgba(143,240,255,.3)'; ctx.beginPath(); ctx.ellipse(x, y + 4, MONO_R, MONO_R * 0.55, 0, 0, TAU); ctx.stroke();
+  const dead = m.cd > 0;
+  ctx.strokeStyle = dead ? 'rgba(165,156,196,.15)' : 'rgba(143,240,255,.3)'; ctx.beginPath(); ctx.ellipse(x, y + 4, MONO_R, MONO_R * 0.55, 0, 0, TAU); ctx.stroke();
   if (k > 0) { ctx.strokeStyle = '#8ff0ff'; ctx.beginPath(); ctx.ellipse(x, y + 4, MONO_R, MONO_R * 0.55, 0, -Math.PI / 2, -Math.PI / 2 + TAU * k); ctx.stroke(); }
   ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.fillRect(x - 9, y + 3, 18, 4);
   ctx.fillStyle = '#0b0a12'; ctx.fillRect(x - 8, y - 30, 16, 36);
   ctx.fillStyle = '#4a4466'; ctx.fillRect(x - 7, y - 29, 14, 34); ctx.fillStyle = '#6e668f'; ctx.fillRect(x - 7, y - 29, 4, 34);
   ctx.fillStyle = '#4a4466'; ctx.fillRect(x - 5, y - 33, 10, 4);
-  const glow = 0.5 + 0.5 * Math.sin(t * 3) + k;
-  ctx.fillStyle = `rgba(143,240,255,${Math.min(1, 0.35 + glow * 0.4)})`;
+  const glow = dead ? 0 : 0.5 + 0.5 * Math.sin(t * 3) + k;
+  ctx.fillStyle = dead ? 'rgba(90,84,120,.8)' : `rgba(143,240,255,${Math.min(1, 0.35 + glow * 0.4)})`;
   for (let i = 0; i < 4; i++) ctx.fillRect(x - 1, y - 26 + i * 8, 2, 4);
   ctx.fillRect(x - 4, y - 22, 3, 1); ctx.fillRect(x + 1, y - 14, 3, 1);
-  if (Math.random() < 0.15 + k * 0.5) addPart(m.x + rand(-5, 5), m.y - 20, rand(-3, 3), rand(-26, -12), 0.7, '#8ff0ff', 1);
+  if (!dead && Math.random() < 0.15 + k * 0.5) addPart(m.x + rand(-5, 5), m.y - 20, rand(-3, 3), rand(-26, -12), 0.7, '#8ff0ff', 1);
 }

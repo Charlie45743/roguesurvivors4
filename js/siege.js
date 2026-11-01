@@ -46,8 +46,9 @@ Mods.add({
         s.acc--; s.left--;
         if (G.mobs >= 450) continue;
         let x, y;
-        if (Math.random() < 0.5) { const a = Math.random() * TAU, R = rand(260, 300); x = s.bx + Math.cos(a) * R; y = s.by + Math.sin(a) * R; }   // around the fortress
-        else [x, y] = edgePos(20, pick(G.players));                                                                                            // around you
+        const at = pick([s, ...G.players.filter(p => !p.down)]);   // the fortress or one of you, never far away
+        const an = Math.random() * TAU, R = at === s ? rand(170, 230) : rand(215, 255);
+        x = (at.bx ?? at.x) + Math.cos(an) * R; y = (at.by ?? at.y) + Math.sin(an) * R;
         const e = spawnEnemy(weighted(s.pool), x, y);
         if (e) e.sg = Math.random() < 0.6 ? 'f' : 'p';   // fortress-hunters and player-hunters
       }
