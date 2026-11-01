@@ -368,7 +368,8 @@ function revealMap(rad) {
 function rollFate() {
   const pool = {};
   for (const o of SHRINE_OUTCOMES) pool[o.id] = o.id === 'nothing' ? o.w * 0.5 : o.w * (o.id === 'jackpot' ? 1 + 0.25 * P.luck : 1);
-  return SHRINE_OUTCOMES.find(o => o.id === weighted(pool));
+  const id = weighted(pool);
+  return SHRINE_OUTCOMES.find(o => o.id === id);
 }
 function applyOutcome(out) {
   const pl = P;
@@ -662,16 +663,10 @@ function drawMinimap(now) {
   ctx.fillStyle = '#0d0c16'; ctx.fillRect(x0, y0, S, S);
   ctx.save();
   ctx.beginPath(); ctx.rect(x0, y0, S, S); ctx.clip();
-  // explored ground, coloured by biome like the big map
-  const set = exSet(), half = Math.ceil(S / 2 / scale / EX_C) + 1, ccx = Math.floor(ME.x / EX_C), ccy = Math.floor(ME.y / EX_C), cs = Math.ceil(EX_C * scale) + 1;
-  G.mapCol = G.mapCol || {};
-  for (let i = -half; i <= half; i++) for (let j = -half; j <= half; j++) {
-    const gx = ccx + i, gy = ccy + j, key = exKey(gx, gy);
-    if (!set.has(key)) continue;
-    const ck = (G.dim || 'w') + key;
-    const col = G.mapCol[ck] || (G.mapCol[ck] = MAPCOL[biomeAt(gx * EX_C + EX_C / 2, gy * EX_C + EX_C / 2)] || '#3a3a48');
-    ctx.fillStyle = col; ctx.fillRect(Math.floor(cx + (gx * EX_C - ME.x) * scale), Math.floor(cy + (gy * EX_C - ME.y) * scale), cs, cs);
-  }
+  // explored ground, in the same fine detail as the big map
+  const t = terrain(), ts = TN * TEX * scale;
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(t.c, Math.round(cx + (TORG - ME.x) * scale), Math.round(cy + (TORG - ME.y) * scale), Math.round(ts), Math.round(ts));
   // what you can see on screen right now
   ctx.strokeStyle = 'rgba(242,238,230,.35)'; ctx.lineWidth = 1;
   const vw = W * scale, vh = H * scale;
@@ -683,11 +678,17 @@ function drawMinimap(now) {
     ctx.fillStyle = '#0b0a12'; ctx.fillRect(Math.round(mx - sz / 2) - 1, Math.round(my - sz / 2) - 1, sz + 2, sz + 2);
     ctx.fillStyle = c; ctx.fillRect(Math.round(mx - sz / 2), Math.round(my - sz / 2), sz, sz);
   };
+  const icon = (wx, wy, type, col) => {
+    const ic = structIcon(type, col), mx = cx + (wx - ME.x) * scale, my = cy + (wy - ME.y) * scale;
+    if (!ic) { dot(wx, wy, col, 4); return; }
+    if (mx < x0 + 5 || mx > x0 + S - 5 || my < y0 + 5 || my > y0 + S - 5) return;
+    ctx.drawImage(ic, Math.round(mx - 5.5), Math.round(my - 5.5));
+  };
   if (!noStructs()) {
     const witch = ME.relics?.includes('witchEye');
     for (const st of structsNear(ME.x, ME.y, 2)) {
       const seen = st.built || G.revealed?.has(st.id) || witch;
-      if (seen && !(st.done && st.type !== 'village')) dot(st.x, st.y, st.ruined ? '#8a80b0' : STRUCT_COL[st.type], st.type === 'town' ? 6 : 4);
+      if (seen && !(st.done && st.type !== 'village')) icon(st.x, st.y, st.type, st.ruined ? '#8a80b0' : STRUCT_COL[st.type]);
     }
     for (const s of G.shrines) if (s.uses > 0) dot(s.x, s.y, '#e27bf0', 3);
     for (const c of G.crypts) dot(c.x, c.y, '#e8742c', 3);

@@ -34,6 +34,7 @@ function scene(top, bottom, parts) {
 const ARTS = {
   normal: () => scene('#1a1030', '#4a2250', [['#9a4fd0', 28, 40, 14], ['#8ff0ff', 104, 62, 9], [charFrames('wren')[0], .32, .42], [SPR.swarmeye[0], .2, .8]]),
   story: () => scene('#2a1a12', '#6a3a1c', [['#ffd35a', 100, 34, 12], [NPC_SPR.lamplighter[0], .34, .35], [NPC_SPR.witch[0], .3, .72]]),
+  siege: () => scene('#2a1010', '#6a2a1c', [['#e8742c', 65, 58, 16], [charFrames('brask')[0], .32, .3], [SPR.swarmeye[0], .2, .62], [SPR.swarmeye[0], .16, .85]]),
   coop: () => scene('#10203a', '#1c4a6a', [['#e8742c', 65, 36, 10], [charFrames('wren')[0], .3, .25], [charFrames('morrow')[0], .3, .5], [charFrames('isolde')[0], .3, .75]]),
   local: () => scene('#122a2a', '#1f5a4a', [['#a6e05a', 100, 34, 10], [charFrames('wren')[0], .34, .3], [charFrames('nyx')[0], .34, .7]]),
   online: () => scene('#1a1a3a', '#2a3a8a', [['#8ff0ff', 65, 52, 22], [charFrames('wren')[0], .26, .2], [charFrames('brask')[0], .26, .8]]),
@@ -67,7 +68,8 @@ $('setFull').onclick = () => { Snd.play('select'); if (document.fullscreenElemen
 $('btnPlay').onclick = () => { Snd.play('select'); openModes(); };
 $('btnBoard').onclick = () => { Snd.play('select'); openBoard(); };
 $('btnSettings').onclick = () => { Snd.play('select'); openSettings(); };
-$('btnNormal').onclick = () => { Snd.play('select'); openChars(); };
+$('btnNormal').onclick = () => { Snd.play('select'); SIEGE_NEXT = false; openChars(); };
+$('btnSiege').onclick = () => { Snd.play('select'); SIEGE_NEXT = true; openChars(); };
 $('btnCoop').onclick = () => { Snd.play('select'); openCoopMenu(); };
 $('btnGoLocal').onclick = () => { Snd.play('select'); openLocalLobby(); };
 $('btnGoOnline').onclick = () => { Snd.play('select'); openOnline(); };

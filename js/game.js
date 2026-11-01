@@ -2562,7 +2562,7 @@ function openChars() {
       }
       Snd.play('select');
       lastChar = ch.id;
-      newRun(ch.id);
+      newRun(ch.id, SIEGE_NEXT ? { siege: true } : {});
     };
     box.appendChild(b);
   });
@@ -2659,7 +2659,7 @@ if (QS.get('weak')) for (const b of BOSSES) b.hp = 60;
 // Test entry runs once every module has loaded
 addEventListener('load', () => {
   if (QS.get('auto')) {
-    newRun(QS.get('auto'));
+    newRun(QS.get('auto'), QS.get('siege') ? { siege: true } : {});
     if (QS.get('t')) {
       G.t = +QS.get('t');
       G.evIdx = EVENTS.findIndex(ev => ev.t >= G.t);
