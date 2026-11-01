@@ -242,6 +242,7 @@ input[type=range] { accent-color: var(--ember); width: 140px; }
 .card.pf, .alt.pf, .mode.pf { outline-offset: 12px; }
 .card.pf { transform: translateY(-6px); }
 #lobby:not(.joining) #roomCode, #lobby:not(.joining) .or { display: none; }
+.tabs { display: flex; gap: 10px; margin-bottom: 14px; } .tabs .btn { font-size: 15px; padding: 8px 26px; } .tabs .btn.on { background: var(--ember); color: var(--void); }
 .board { width: min(560px, 100%); display: flex; flex-direction: column; gap: 8px; }
 .brow { display: flex; align-items: center; gap: 12px; background: var(--panel); padding: 8px 14px; font-family: var(--head); font-size: 15px; box-shadow: 0 0 0 3px var(--void), 0 0 0 5px var(--line); }
 .brow .rk { width: 28px; color: var(--dim); } .brow:first-child .rk { color: var(--gold); }
@@ -506,6 +507,7 @@ button.pane.open:hover { opacity: 1; background: var(--panel2); }
 <section id="board" class="screen hidden">
   <h2>Leaderboard</h2>
   <p class="sub">Your longest nights on this device.</p>
+  <div class="tabs"><button class="btn ghost on" id="tabSolo">Solo</button><button class="btn ghost" id="tabCoop">Co-op</button></div>
   <div id="boardList" class="board"></div>
   <button class="btn ghost" data-back>Back</button>
 </section>

@@ -44,14 +44,21 @@ function fillArt() {
 }
 
 /* ---------- Leaderboard ---------- */
-function openBoard() {
+let boardTab = 'solo';
+function openBoard(tab = boardTab) {
+  boardTab = tab;
   setState('board');
-  const runs = save.runs || [];
+  $('tabSolo').classList.toggle('on', tab === 'solo'); $('tabCoop').classList.toggle('on', tab === 'coop');
+  const runs = (save.runs || []).filter(r => (r.m === 'c') === (tab === 'coop'));
+  const face = id => `<img src="${charFrames((CHARS.find(c => c.id === id) || CHARS[0]).id)[0].c.toDataURL()}" alt="">`;
+  const name = id => (CHARS.find(c => c.id === id) || CHARS[0]).name;
   $('boardList').innerHTML = runs.length ? runs.map((r, i) => {
-    const ch = CHARS.find(c => c.id === r.ch) || CHARS[0];
-    return `<div class="brow"><span class="rk">${i + 1}</span><img src="${charFrames(ch.id)[0].c.toDataURL()}" alt=""><span class="bn">${ch.name}<br><small>${r.k} slain · level ${r.lv}${r.w ? ' · survived' : ''}</small></span><span class="bt">${fmtTime(r.t)}</span></div>`;
-  }).join('') : '<div class="empty">No nights survived yet. Go and make some history.</div>';
+    const ids = r.cs || [r.ch];
+    return `<div class="brow"><span class="rk">${i + 1}</span>${ids.map(face).join('')}<span class="bn">${ids.map(name).join(' & ')}<br><small>${r.k} slain · level ${r.lv}${r.sg ? ' · siege wave ' + r.sg : ''}${r.w ? ' · survived' : ''}</small></span><span class="bt">${fmtTime(r.t)}</span></div>`;
+  }).join('') : `<div class="empty">${tab === 'coop' ? 'No co-op nights yet. Gather some friends.' : 'No nights survived yet. Go and make some history.'}</div>`;
 }
+$('tabSolo').onclick = () => { Snd.play('select'); openBoard('solo'); };
+$('tabCoop').onclick = () => { Snd.play('select'); openBoard('coop'); };
 
 /* ---------- Settings ---------- */
 function openSettings() {

@@ -2505,7 +2505,9 @@ function gameOver(won) {
   save.gold += earned;
   G.earnedGold = earned;
   save.best = Math.max(save.best || 0, Math.min(G.t, RUN_LENGTH));
-  save.runs = [...(save.runs || []), { ch: G.ch.id, t: Math.floor(Math.min(G.t, RUN_LENGTH)), k: G.kills, lv: G.level, w: !!won }].sort((a, b) => b.t - a.t || b.k - a.k).slice(0, 10);
+  const seen = { s: 0, c: 0 };   // top 10 per leaderboard tab: solo (s) and co-op (c)
+  save.runs = [...(save.runs || []), { ch: G.ch.id, cs: G.players.map(p => p.ch && p.ch.id).filter(Boolean), m: G.local || G.coop ? 'c' : 's', sg: G.siege ? G.siege.wave : 0, t: Math.floor(Math.min(G.t, RUN_LENGTH)), k: G.kills, lv: G.level, w: !!won }]
+    .sort((a, b) => b.t - a.t || b.k - a.k).filter(r => ++seen[r.m || 's'] <= 10);
   persist();
   setState('over');
   $('overT').textContent = won ? 'Dawn breaks' : 'You fell';
