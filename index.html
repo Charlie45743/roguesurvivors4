@@ -140,6 +140,9 @@ h2 { font-family: var(--head); font-weight: 700; font-size: clamp(26px, 4.5vw, 4
 #levelnote:empty { display: none; }
 #counters { justify-self: end; text-align: right; font-family: var(--head); font-size: 15px; display: flex; flex-direction: column; gap: 4px;
   text-shadow: 0 2px 0 var(--void), 2px 0 0 var(--void), -2px 0 0 var(--void), 0 -2px 0 var(--void); }
+#hpbox { position: relative; width: 84px; height: 14px; margin: 5px 0 0 auto; background: var(--void); box-shadow: 0 0 0 2px var(--void), 0 0 0 3px var(--line); }
+#hpfill { position: absolute; inset: 0; width: 100%; background: #d8354a; transition: width .12s; }
+#hpnum { position: relative; display: block; font-size: 11px; line-height: 14px; text-align: center; color: #fff; text-shadow: 0 1px 0 #0b0a12, 0 0 3px #0b0a12; }
 #counters img { width: 14px; vertical-align: -2px; margin-right: 4px; }
 #bossbar { position: absolute; bottom: 22px; left: 50%; transform: translateX(-50%); width: min(560px, 80vw); text-align: center; }
 #bossname { font-family: var(--head); font-size: 16px; color: var(--red); margin-bottom: 6px; letter-spacing: 2px;
@@ -452,7 +455,7 @@ button.pane.open:hover { opacity: 1; background: var(--panel2); }
   <div id="hudrow">
     <div><div id="wslots" class="slotrow"></div><div id="pslots" class="slotrow"></div></div>
     <div id="timerbox"><div id="timer">00:00</div><div id="levelnote"></div></div>
-    <div id="counters"><div><img data-icon="skull" alt=""><span id="kills">0</span></div><div><img data-icon="gold" alt=""><span id="goldc">0</span></div></div>
+    <div id="counters"><div><img data-icon="skull" alt=""><span id="kills">0</span></div><div><img data-icon="gold" alt=""><span id="goldc">0</span></div><div id="hpbox"><div id="hpfill"></div><span id="hpnum">100</span></div></div>
   </div>
   <div id="bossbar" class="hidden"><div id="bossname"></div><div class="bar"><div id="bossfill"></div></div></div>
   <div id="buffs"></div>
@@ -643,39 +646,39 @@ button.pane.open:hover { opacity: 1; background: var(--panel2); }
 window.__errs = [];
 window.addEventListener('error', e => { window.__errs.push(e.message + ':' + e.lineno); document.getElementById('err').textContent += (e.message + ' @' + (e.filename || '').split('/').pop() + ':' + e.lineno + '\n'); });
 </script>
-<script src="js/sprites.js?v=16"></script>
-<script src="js/audio.js?v=16"></script>
-<script src="js/data.js?v=16"></script>
-<script src="js/game.js?v=16"></script>
-<script src="js/art.js?v=16"></script>
-<script src="js/dungeon.js?v=16"></script>
-<script src="js/dungeon2.js?v=16"></script>
-<script src="js/bosses.js?v=16"></script>
-<script src="js/bossfx.js?v=16"></script>
-<script src="js/bossart.js?v=16"></script>
-<script src="js/structures.js?v=16"></script>
-<script src="js/powerups.js?v=16"></script>
-<script src="js/towns.js?v=16"></script>
-<script src="js/dims.js?v=16"></script>
-<script src="js/story.js?v=16"></script>
-<script src="js/allies.js?v=16"></script>
-<script src="js/sites.js?v=16"></script>
-<script src="js/dungeon3.js?v=16"></script>
-<script src="js/world.js?v=16"></script>
-<script src="js/cine.js?v=16"></script>
-<script src="js/ldbosses.js?v=16"></script>
-<script src="js/lastdawn.js?v=16"></script>
-<script src="js/ldch1.js?v=16"></script>
-<script src="js/ldch3.js?v=16"></script>
-<script src="js/ldch5.js?v=16"></script>
+<script src="js/sprites.js?v=18"></script>
+<script src="js/audio.js?v=18"></script>
+<script src="js/data.js?v=18"></script>
+<script src="js/game.js?v=18"></script>
+<script src="js/art.js?v=18"></script>
+<script src="js/dungeon.js?v=18"></script>
+<script src="js/dungeon2.js?v=18"></script>
+<script src="js/bosses.js?v=18"></script>
+<script src="js/bossfx.js?v=18"></script>
+<script src="js/bossart.js?v=18"></script>
+<script src="js/structures.js?v=18"></script>
+<script src="js/powerups.js?v=18"></script>
+<script src="js/towns.js?v=18"></script>
+<script src="js/dims.js?v=18"></script>
+<script src="js/story.js?v=18"></script>
+<script src="js/allies.js?v=18"></script>
+<script src="js/sites.js?v=18"></script>
+<script src="js/dungeon3.js?v=18"></script>
+<script src="js/world.js?v=18"></script>
+<script src="js/cine.js?v=18"></script>
+<script src="js/ldbosses.js?v=18"></script>
+<script src="js/lastdawn.js?v=18"></script>
+<script src="js/ldch1.js?v=18"></script>
+<script src="js/ldch3.js?v=18"></script>
+<script src="js/ldch5.js?v=18"></script>
 <script src="https://cdn.jsdelivr.net/npm/nostr-tools@2.7.2/lib/nostr.bundle.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/5.3.4/mqtt.min.js"></script>
-<script src="js/net.js?v=16"></script>
-<script src="js/local.js?v=16"></script>
-<script src="js/siege.js?v=16"></script>
-<script src="js/monolith.js?v=16"></script>
-<script src="js/pots.js?v=16"></script>
-<script src="js/menus.js?v=16"></script>
-<script src="js/devhooks.js?v=16"></script>
+<script src="js/net.js?v=18"></script>
+<script src="js/local.js?v=18"></script>
+<script src="js/siege.js?v=18"></script>
+<script src="js/monolith.js?v=18"></script>
+<script src="js/pots.js?v=18"></script>
+<script src="js/menus.js?v=18"></script>
+<script src="js/devhooks.js?v=18"></script>
 </body>
 </html>

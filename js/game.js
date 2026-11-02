@@ -375,7 +375,7 @@ function recalc() {
   const maxHp = 100 + 20 * lv('vitality') + 10 * (sh.vit || 0) + (m.maxHp || 0);
   if (P.maxHp && maxHp > P.maxHp) P.hp += maxHp - P.maxHp;
   P.maxHp = maxHp; P.hp = Math.min(P.hp, P.maxHp);
-  P.regen = 0.4 + 0.3 * lv('vitality');
+  P.regen = 2 + 0.3 * lv('vitality');
   P.magnet = 32 * (1 + 0.35 * lv('magnet') + 0.15 * (sh.magnet || 0) + (m.magnet || 0));
   P.growth = 1.4 + 0.1 * lv('growth') + 0.05 * (sh.growth || 0);
   P.armor = lv('armor') + (m.armor || 0);
@@ -533,8 +533,8 @@ function director(dt) {
   G.hpMul = 1 + minute * 0.16 + minute * minute * 0.011;
   while (G.evIdx < EVENTS.length && G.t >= EVENTS[G.evIdx].t) runEvent(EVENTS[G.evIdx++]);
   if (G.won) return;
-  const wave = WAVES[m], cap = Math.min(1100, 200 + m * 70);
-  G.spawnAcc += wave.rate * 0.65 * (G.boss ? 0.45 : 1) * (G.spawnMul || 1) * (G.t < 180 ? 2.5 : 3) * dt;
+  const wave = WAVES[m], cap = Math.min(1500, 300 + m * 100);
+  G.spawnAcc += wave.rate * 0.65 * (G.boss ? 0.45 : 1) * (G.spawnMul || 1) * (G.t < 180 ? 5 : 6) * dt;
   while (G.spawnAcc >= 1) {
     G.spawnAcc--;
     if (G.mobs < cap) { const [x, y] = edgePos(); spawnEnemy(weighted(wave.types), x, y); }
@@ -2247,6 +2247,9 @@ function updateHud() {
   if (chainClock) $('timer').classList.toggle('boss', (L < 60 && G.dimPhase !== 'done') || !!G.boss);
   set('kills', G.kills);
   set('goldc', G.gold);
+  $('hpbox').style.display = G.local && G.players.length > 1 ? 'none' : '';
+  $('hpfill').style.width = clamp(ME.hp / ME.maxHp, 0, 1) * 100 + '%';
+  set('hpnum', Math.ceil(ME.hp) + ' / ' + ME.maxHp);
   const bk = Object.keys(G.buffs).filter(k => G.buffs[k] > 0).map(k => k + Math.ceil(G.buffs[k])).join();
   if (hudLast.buffs !== bk) {
     hudLast.buffs = bk;

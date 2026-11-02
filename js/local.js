@@ -326,6 +326,17 @@ function localKey(e) {
   return true;
 }
 
+// Every split-screen pane gets its own health bar in its top right corner
+Mods.add({
+  drawOverlay() {
+    if (!G || !G.local || G.players.length < 2 || !(state === 'play' || state === 'pause')) return;
+    const w = 70, x = W - w - 6, y = 5, hp = Math.max(0, P.hp), k = clamp(hp / P.maxHp, 0, 1);
+    ctx.fillStyle = '#0b0a12'; ctx.fillRect(x - 2, y - 2, w + 4, 10);
+    ctx.fillStyle = '#36304f'; ctx.fillRect(x, y, w, 6);
+    ctx.fillStyle = P.down ? '#5e557f' : '#d8354a'; ctx.fillRect(x, y, Math.round(w * k), 6);
+    drawText(ctx, Math.ceil(hp) + '/' + P.maxHp, x + w / 2, y + 3, '#ffffff');
+  },
+});
 Mods.add({
   key(e) { return localKey(e); },
   input() { pollPads(); },
