@@ -466,7 +466,7 @@ function edgePosFor(pad) {
 function spawnEnemy(type, x, y, opt = {}) {
   const d = ENEMIES[type];
   const e = {
-    id: uid++, type, d, x, y, r: d.r, hp: d.hp * G.hpMul * (opt.hpMul || 1) * (G.buffs.greed > 0 ? 1.5 : 1) * (G.dimMul || 1), spd: d.spd * (opt.spdMul || 1) * rand(0.92, 1.08),
+    id: uid++, type, d, x, y, r: d.r, hp: d.hp * 2 * G.hpMul * (opt.hpMul || 1) * (G.buffs.greed > 0 ? 1.5 : 1) * (G.dimMul || 1), spd: d.spd * (opt.spdMul || 1) * rand(0.92, 1.08),
     dmg: d.dmg * (1 + G.t / 900) * (G.dimMul ? 1 + (G.dimMul - 1) * 0.5 : 1), xp: d.xp, kx: 0, ky: 0, flash: 0, slow: 0, freeze: 0, anim: Math.random() * 10,
     cd: {}, frames: SPR[d.spr], elite: !!d.elite, dead: false, dir: 1, swarm: opt.swarm || null, scale: 1,
   };
@@ -534,7 +534,7 @@ function director(dt) {
   while (G.evIdx < EVENTS.length && G.t >= EVENTS[G.evIdx].t) runEvent(EVENTS[G.evIdx++]);
   if (G.won) return;
   const wave = WAVES[m], cap = Math.min(1500, 300 + m * 100);
-  G.spawnAcc += wave.rate * 0.65 * (G.boss ? 0.45 : 1) * (G.spawnMul || 1) * (G.t < 180 ? 5 : 6) * dt;
+  G.spawnAcc += wave.rate * 0.65 * (G.boss ? 0.45 : 1) * (G.spawnMul || 1) * (G.t < 60 ? 2.5 : G.t < 180 ? 5.5 : 6.5) * dt;
   while (G.spawnAcc >= 1) {
     G.spawnAcc--;
     if (G.mobs < cap) { const [x, y] = edgePos(); spawnEnemy(weighted(wave.types), x, y); }

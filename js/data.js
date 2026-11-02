@@ -212,7 +212,6 @@ const ALTAR = [
 const altarCost = (a, rank) => Math.round(a.base * (1 + rank * 0.9));
 
 function xpFor(level) {
-  if (level < 20) return 5 + (level - 1) * 10;
-  if (level < 40) return 195 + (level - 20) * 13;
-  return 455 + (level - 40) * 16;
+  const base = level < 20 ? 5 + (level - 1) * 10 : level < 40 ? 195 + (level - 20) * 13 : 455 + (level - 40) * 16;
+  return Math.round(base * 1.6);   // slower levelling
 }
