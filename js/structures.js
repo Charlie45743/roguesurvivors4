@@ -83,7 +83,7 @@ Object.assign(BUFFS, {
 
 /* ---------- Structures ---------- */
 const REGION = 680;
-const STRUCT_W = { town: 0.45, village: 1.2, ruinvillage: 0.9, hut: 1, tower: 0.55, ruins: 0.8, graveyard: 0.9, bandits: 1, mine: 0.8, watchtower: 1.1, gate: 0.4, temple: 0.5, mansion: 0.5 };
+const STRUCT_W = { town: 0.45, village: 1.2, ruinvillage: 0.9, hut: 1, tower: 0.55, ruins: 0.8, bandits: 1, mine: 0.8, watchtower: 1.1, gate: 0.4, temple: 0.5, mansion: 0.5 };
 const STRUCT_R = { town: 290, village: 200, ruinvillage: 190, hut: 60, tower: 50, ruins: 80, graveyard: 150, bandits: 125, mine: 64, watchtower: 40, gate: 60, temple: 90, mansion: 110 };
 const STRUCT_COL = { town: '#ffd35a', village: '#ffd35a', ruinvillage: '#a59cc4', hut: '#a6e05a', tower: '#f2eee6', ruins: '#e8742c', graveyard: '#a6e05a', bandits: '#d8354a', mine: '#9a6a42', watchtower: '#9a6a42', gate: '#d8354a', temple: '#c9c2e0', mansion: '#e27bf0' };
 const NPC_NAMES = { witch: 'Witch', smith: 'Blacksmith', alchemist: 'Alchemist', cartographer: 'Cartographer', hunter: 'Hunter', merchant: 'Merchant', priest: 'Priest' };

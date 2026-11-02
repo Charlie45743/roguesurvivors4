@@ -533,8 +533,8 @@ function director(dt) {
   G.hpMul = 1 + minute * 0.16 + minute * minute * 0.011;
   while (G.evIdx < EVENTS.length && G.t >= EVENTS[G.evIdx].t) runEvent(EVENTS[G.evIdx++]);
   if (G.won) return;
-  const wave = WAVES[m], cap = Math.min(650, 80 + m * 32);
-  G.spawnAcc += wave.rate * 0.65 * (G.boss ? 0.45 : 1) * (G.spawnMul || 1) * dt;
+  const wave = WAVES[m], cap = Math.min(1100, 200 + m * 70);
+  G.spawnAcc += wave.rate * 0.65 * (G.boss ? 0.45 : 1) * (G.spawnMul || 1) * (G.t < 180 ? 2.5 : 3) * dt;
   while (G.spawnAcc >= 1) {
     G.spawnAcc--;
     if (G.mobs < cap) { const [x, y] = edgePos(); spawnEnemy(weighted(wave.types), x, y); }
@@ -2079,7 +2079,7 @@ function drawEnemy(e, now) {
   else if (e.freeze > 0) { ctx.globalAlpha = 0.65; blit(silhouette(fr, '#8ff0ff'), e.x, e.y + bob, w, h, flip); ctx.globalAlpha = 1; }
   else if (e.slow > 0) { ctx.globalAlpha = 0.35; blit(silhouette(fr, '#3f8ee0'), e.x, e.y + bob, w, h, flip); ctx.globalAlpha = 1; }
   if (e.type === 'eye') light(e.x, e.y + bob, 12, 0.4);
-  if (e.elite && e.hp < e.maxHp) {
+  if ((e.elite || e.guardian) && e.hp < e.maxHp) {
     const bx = Math.round(e.x - camX - 9), by = Math.round(e.y - camY - h / 2 - 5);
     ctx.fillStyle = '#0b0a12'; ctx.fillRect(bx - 1, by - 1, 20, 4);
     ctx.fillStyle = '#ffd35a'; ctx.fillRect(bx, by, Math.round(18 * e.hp / e.maxHp), 2);

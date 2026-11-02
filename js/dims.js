@@ -152,7 +152,7 @@ function exitDimension() {
 function worldBoss(px, py, enraged) {
   G.dimPhase = 'boss';
   const [x, y] = px !== undefined ? [px, py] : edgePos(30);
-  const b = makeBoss('colossus', x, y, { hpMul: 1.8, dmgMul: enraged ? 1.25 : 1, onDeath: e => dimBossDown(e) });
+  const b = makeBoss('colossus', x, y, { hpMul: 5.4, dmgMul: enraged ? 1.25 : 1, onDeath: e => dimBossDown(e) });
   banner(b.name, 'Slay it before time runs out', DIMS.world.color); Snd.play('warn');
 }
 function dimBoss(px, py, enraged) {
@@ -162,7 +162,7 @@ function dimBoss(px, py, enraged) {
   const id = ids[G.dimBossIdx];
   const [x, y] = G.dim === 'island' ? [ISLAND_R, 0] : px !== undefined ? [px, py] : edgePos(30);
   G.dimPhase = 'boss';
-  const b = makeBoss(id, id === 'herald' ? 0 : x, id === 'herald' ? -ISLAND_R * 0.5 : y, { hpMul: (0.5 + def.mul * 0.35) * (G.story ? 1 : 1.4), dmgMul: (0.2 + def.mul * 0.6) * (enraged ? 1.25 : 1), onDeath: e => dimBossDown(e) });
+  const b = makeBoss(id, id === 'herald' ? 0 : x, id === 'herald' ? -ISLAND_R * 0.5 : y, { hpMul: (0.5 + def.mul * 0.35) * (G.story ? 1 : 1.4) * 3, dmgMul: (0.2 + def.mul * 0.6) * (enraged ? 1.25 : 1), onDeath: e => dimBossDown(e) });
   banner(b.name, G.dim === 'island' && G.dimBossIdx === 1 ? 'The black sun descends' : 'Guardian of ' + def.name, def.color);
   Snd.play('warn');
 }
@@ -337,7 +337,7 @@ function nearSpawner(pl) {
 function guardSpawner(s) {
   s.guarded = true;
   const lv = G.dim || 'world', def = DIMS[lv], pool = def.chainEnemies || (Object.keys(def.enemies).length ? def.enemies : { ghoul: 3, skel: 3, wraith: 2, eye: 1 }), n = 9 + Math.max(0, LEVEL_CHAIN.indexOf(lv)) * 2;
-  for (let i = 0; i < n; i++) { const a = i / n * TAU, e = spawnEnemy(weighted(pool), s.x + Math.cos(a) * 70, s.y + Math.sin(a) * 52); e.rise = 0.5; }
+  for (let i = 0; i < n; i++) { const a = i / n * TAU, e = spawnEnemy(weighted(pool), s.x + Math.cos(a) * 70, s.y + Math.sin(a) * 52); e.rise = 0.5; e.hp *= 2; e.maxHp = e.hp; e.dmg *= 2; e.guardian = true; }
   banner('The boss portal is guarded', 'Cut through its keepers', DIMS[s.dim].color);
 }
 function activateSpawner(s) {
